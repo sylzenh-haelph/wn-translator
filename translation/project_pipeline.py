@@ -240,11 +240,18 @@ class ProjectPipeline:
 
             results.append(result)
 
-            result_context = getattr(
-                result,
-                "context_state",
-                None,
-            )
+            if isinstance(result, list):
+                result_context = (
+                    getattr(result[-1], "context_state", None)
+                    if result
+                    else None
+                )
+            else:
+                result_context = getattr(
+                    result,
+                    "context_state",
+                    None,
+                )
 
             if result_context is not None:
                 context_state = result_context
