@@ -1,0 +1,34 @@
+# Secrets
+.env
+*.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
+
+# Project runtime state
+progress/
+
+# Generated translation outputs
+output/
+outputs/
+*.translated.epub
+*.translated.docx
+
+# Local/editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Local test/runtime data
+temp/
