@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from qa.retry_controller import RetryController
+from qa.rule_based_qa import QAIssue
 from translation.chapter_context import ContextState
 
 
@@ -10,7 +11,8 @@ class FakeTranslationEngine:
 
     def translate(
         self,
-        chunk,
+        text,
+        paragraph_texts,
         chapter_context,
         context_state,
         entity_resolutions=None,
@@ -54,6 +56,7 @@ controller = RetryController(
 chunk = SimpleNamespace(
     chunk_id="chunk_0000",
     text="Alice enters the palace.",
+    paragraph_texts=["Alice enters the palace."],
 )
 
 chapter_context = SimpleNamespace(
@@ -83,9 +86,9 @@ print("Context:", result.context_state)
 
 assert result.passed is True
 assert result.flagged is False
-assert result.attempts == 1
+assert len(result.attempts) == 1
 assert result.context_state.scene == "Scene 1"
-assert result.history[0].context_state.scene == "Scene 1"
+assert result.attempts[0].context_state.scene == "Scene 1"
 
 
 print("\n=== RETRY CONTEXT PROPAGATION ===")
@@ -97,7 +100,8 @@ class RetryTranslationEngine:
 
     def translate(
         self,
-        chunk,
+        text,
+        paragraph_texts,
         chapter_context,
         context_state,
         entity_resolutions=None,
@@ -136,7 +140,7 @@ def retry_qa(
     # Attempt kedua berhasil.
     return SimpleNamespace(
         passed=len(qa_calls) >= 2,
-        issues=[] if len(qa_calls) >= 2 else ["test_failure"],
+        issues=[] if len(qa_calls) >= 2 else [QAIssue(rule="test_failure", message="Intentional test failure")],
     )
 
 
@@ -156,7 +160,7 @@ result = retry_controller.translate_with_retry(
 
 print("Attempts:", result.attempts)
 
-for attempt in result.history:
+for attempt in result.attempts:
     print(
         attempt.attempt_number,
         attempt.translation,
@@ -165,11 +169,11 @@ for attempt in result.history:
 
 
 assert result.passed is True
-assert result.attempts == 2
+assert len(result.attempts) == 2
 
 # Attempt kedua harus menerima context
 # hasil attempt pertama.
-assert result.history[1].context_state.scene == (
+assert result.attempts[1].context_state.scene == (
     "Scene after Scene after initial"
 )
 

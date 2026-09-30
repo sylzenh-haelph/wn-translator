@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
-from research.entity_detector import detect_entities
-from research.ai_entity_classifier import classify_with_ai
+from research.ai_entity_adapter import ai_entities_to_candidates
 from research.entity_db import EntityDB
 from research.entity_resolver import ResolvedEntity
 from research.adaptive_research import AdaptiveResearchEngine
@@ -36,9 +35,6 @@ class EntityResearchPipeline:
         self.resolution_service = resolution_service
         self.evidence_validator = evidence_validator or EvidenceValidator()
 
-    def _classify(self, candidate, context):
-        return classify_with_ai(self.client, candidate, context)
-
     def _build_context(self, document, candidate):
         parts = []
 
@@ -58,7 +54,9 @@ class EntityResearchPipeline:
         )
 
         if paragraph is not None:
-            parts.append(f"Source paragraph: {paragraph.text}")
+            parts.append(
+                f"Source paragraph: {paragraph.text}"
+            )
 
         return "\n".join(parts)
 
@@ -88,15 +86,15 @@ class EntityResearchPipeline:
             source=record.get("source"),
         )
 
-    def _create_entity(self, candidate, classification):
+    def _create_entity(self, candidate):
         self.db.add(
             canonical_name=candidate.text,
-            entity_type=classification.entity_type,
+            entity_type=candidate.entity_type,
             translation=None,
             aliases=[],
             locked=False,
-            source="ai_classifier",
-            notes=classification.reason,
+            source="ai_entity_extractor",
+            notes=candidate.reason,
         )
 
     def _build_research_evidence(self, research_result):
@@ -156,7 +154,6 @@ class EntityResearchPipeline:
     def _interpret_research(
         self,
         candidate,
-        classification,
         research_evidence,
         document,
         context,
@@ -166,7 +163,7 @@ class EntityResearchPipeline:
 
         return self.interpreter.interpret(
             entity_text=candidate.text,
-            entity_type=classification.entity_type,
+            entity_type=candidate.entity_type,
             evidence=research_evidence,
             project_title=document.title,
             chapter_context=context,
@@ -189,7 +186,9 @@ class EntityResearchPipeline:
                 and research_candidate.confidence >= 0.5
             ):
                 research_translation = {
-                    "value": research_candidate.translation_candidate,
+                    "value": (
+                        research_candidate.translation_candidate
+                    ),
                     "reason": research_candidate.reason,
                 }
 
@@ -230,58 +229,21 @@ class EntityResearchPipeline:
                 candidate.text
             )
 
-            return self._apply_resolution(
-                resolved,
-                resolution,
-            ), 0
-
-        classification = self._classify(
-            candidate,
-            context,
-        )
-
-        if (
-            classification.entity_type == "unknown"
-            or classification.confidence < 0.5
-        ):
-            self.db.add(
-                canonical_name=candidate.text,
-                entity_type="proper_noun",
-                translation=None,
-                aliases=[],
-                locked=False,
-                source="ai_classifier",
-                notes=(
-                    "AI classification uncertain: "
-                    + classification.reason
+            return (
+                self._apply_resolution(
+                    resolved,
+                    resolution,
                 ),
+                0,
             )
 
-            record = self.db.get(candidate.text)
-
-            resolved = self._record_to_resolved(
-                candidate,
-                record,
-                status="uncertain",
-            )
-
-            resolution = self._resolve_translation(
-                candidate.text
-            )
-
-            return self._apply_resolution(
-                resolved,
-                resolution,
-            ), 0
-
-        self._create_entity(
-            candidate,
-            classification,
-        )
+        # Entity type sudah ditentukan oleh AI entity extractor.
+        # Tidak perlu menjalankan AI classifier kedua.
+        self._create_entity(candidate)
 
         research_result = self.research_engine.research(
             entity_text=candidate.text,
-            entity_type=classification.entity_type,
+            entity_type=candidate.entity_type,
             novel_title=document.title,
             author=document.author,
             chapter_context=context,
@@ -295,7 +257,7 @@ class EntityResearchPipeline:
             valid_evidence, rejected_evidence = (
                 self._filter_valid_evidence(
                     entity_text=candidate.text,
-                    entity_type=classification.entity_type,
+                    entity_type=candidate.entity_type,
                     research_evidence=raw_evidence,
                     query=research_result.final_query,
                 )
@@ -303,18 +265,20 @@ class EntityResearchPipeline:
 
             for evidence_data in valid_evidence:
                 self.db.add_research(
-                    entity_type=classification.entity_type,
+                    entity_type=candidate.entity_type,
                     canonical_name=candidate.text,
                     evidence=evidence_data,
                 )
 
             if not valid_evidence:
                 self.db.mark_research_failed(
-                    entity_type=classification.entity_type,
+                    entity_type=candidate.entity_type,
                     canonical_name=candidate.text,
                 )
 
-                record = self.db.get(candidate.text)
+                record = self.db.get(
+                    candidate.text
+                )
 
                 resolved = self._record_to_resolved(
                     candidate,
@@ -340,7 +304,6 @@ class EntityResearchPipeline:
 
             research_candidate = self._interpret_research(
                 candidate=candidate,
-                classification=classification,
                 research_evidence=valid_evidence,
                 document=document,
                 context=context,
@@ -351,7 +314,9 @@ class EntityResearchPipeline:
                 research_candidate=research_candidate,
             )
 
-            record = self.db.get(candidate.text)
+            record = self.db.get(
+                candidate.text
+            )
 
             resolved = self._record_to_resolved(
                 candidate,
@@ -368,11 +333,13 @@ class EntityResearchPipeline:
             )
 
         self.db.mark_research_failed(
-            entity_type=classification.entity_type,
+            entity_type=candidate.entity_type,
             canonical_name=candidate.text,
         )
 
-        record = self.db.get(candidate.text)
+        record = self.db.get(
+            candidate.text
+        )
 
         resolved = self._record_to_resolved(
             candidate,
@@ -394,7 +361,14 @@ class EntityResearchPipeline:
         )
 
     def process_document(self, document):
-        candidates = detect_entities(document)
+        # AI extractor bekerja dalam batch, sehingga Gemini dipanggil
+        # satu kali untuk seluruh kumpulan paragraf dokumen/chapter.
+        candidates = ai_entities_to_candidates(
+            client=self.client,
+            paragraphs=document.paragraphs,
+            novel_title=document.title,
+            author=document.author,
+        )
 
         result = PipelineResult()
 
@@ -410,8 +384,13 @@ class EntityResearchPipeline:
                 )
             )
 
-            result.entities.append(resolved)
-            result.rejected_evidence += rejected_count
+            result.entities.append(
+                resolved
+            )
+
+            result.rejected_evidence += (
+                rejected_count
+            )
 
             if before is None:
                 result.new_entities += 1

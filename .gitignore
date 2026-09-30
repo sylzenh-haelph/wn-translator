@@ -18,6 +18,10 @@ __pycache__/
 
 # Project runtime state
 progress/
+research_data/
+test_pipeline_progress/
+test_research_project/
+test_runtime/
 
 # Generated translation outputs
 output/

@@ -1,40 +1,27 @@
-from research.research_provider import (
-    MockResearchProvider,
-    ResearchResult,
-)
+from research.research_provider import DuckDuckGoResearchProvider
 
-
-provider = MockResearchProvider(
-    results=[
-        ResearchResult(
-            title="Example Source",
-            url="https://example.com",
-            snippet="Example research information.",
-            source="example.com",
-            relevance=0.9,
-        ),
-        ResearchResult(
-            title="Another Source",
-            url="https://example.org",
-            snippet="Another piece of information.",
-            source="example.org",
-            relevance=0.7,
-        ),
-    ]
-)
-
+provider = DuckDuckGoResearchProvider(timeout=20)
 
 results = provider.search(
-    '"Silver Sword" item',
+    '"Oxford University" organization',
     max_results=5,
 )
 
-print("=== RESEARCH PROVIDER TEST ===")
+print("=== DUCKDUCKGO PROVIDER TEST ===")
+print(f"Result count: {len(results)}")
 
-for result in results:
-    print("Title     :", result.title)
-    print("URL       :", result.url)
-    print("Snippet   :", result.snippet)
-    print("Source    :", result.source)
-    print("Relevance :", result.relevance)
+for i, result in enumerate(results, 1):
     print()
+    print(f"[{i}]")
+    print(f"Title: {result.title}")
+    print(f"URL: {result.url}")
+    print(f"Source: {result.source}")
+    print(f"Relevance: {result.relevance}")
+    print(f"Snippet: {result.snippet[:300]}")
+
+if results:
+    print()
+    print("RESEARCH PROVIDER: PASS")
+else:
+    print()
+    print("RESEARCH PROVIDER: FAIL")

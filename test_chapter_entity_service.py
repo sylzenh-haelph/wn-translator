@@ -12,36 +12,40 @@ class FakeEntityResult:
     translation: str | None = None
 
 
+@dataclass
+class FakePipelineResult:
+    entities: list
+
+
 class FakeEntityPipeline:
 
-    def process_text(
-        self,
-        text,
-        source_paragraph_id,
-    ):
+    def process_document(self, document):
         results = []
 
-        if "Alice" in text:
-            results.append(
-                FakeEntityResult(
-                    text="Alice",
-                    entity_type="character",
-                    source_paragraph_id=source_paragraph_id,
-                    translation=None,
-                )
-            )
+        for paragraph in document.paragraphs:
+            text = paragraph.text
 
-        if "Royal Palace" in text:
-            results.append(
-                FakeEntityResult(
-                    text="Royal Palace",
-                    entity_type="place",
-                    source_paragraph_id=source_paragraph_id,
-                    translation="Istana Kerajaan",
+            if "Alice" in text:
+                results.append(
+                    FakeEntityResult(
+                        text="Alice",
+                        entity_type="character",
+                        source_paragraph_id=paragraph.id,
+                        translation=None,
+                    )
                 )
-            )
 
-        return results
+            if "Royal Palace" in text:
+                results.append(
+                    FakeEntityResult(
+                        text="Royal Palace",
+                        entity_type="place",
+                        source_paragraph_id=paragraph.id,
+                        translation="Istana Kerajaan",
+                    )
+                )
+
+        return FakePipelineResult(entities=results)
 
 
 paragraphs = [

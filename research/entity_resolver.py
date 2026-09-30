@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from research.entity_db import EntityDB
-from research.entity_detector import EntityCandidate
+from research.entity_types import EntityCandidate
 
 
 @dataclass

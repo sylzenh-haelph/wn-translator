@@ -7,12 +7,19 @@ from translation.chapter_context import ContextState
 class ProcessedChunk:
     chunk_id: str
     translation: str
-    paragraph_translations: list[str] = field(default_factory=list)
-    context_state: ContextState = field(default_factory=ContextState)
+    paragraph_translations: list[str] = field(
+        default_factory=list
+    )
+    context_state: ContextState = field(
+        default_factory=ContextState
+    )
     attempts: int = 0
     qa_passed: bool = False
     flagged: bool = False
-    issues: list[str] = field(default_factory=list)
+    issues: list[str] = field(
+        default_factory=list
+    )
+    cache_hit: bool = False
 
 
 class ChapterProcessor:
@@ -36,18 +43,33 @@ class ChapterProcessor:
         initial_context_state,
         entity_resolutions=None,
     ):
-        progress = self.progress_db.load(chapter_id)
-        previous_results = self._get_completed_chunks(progress)
+        progress = self.progress_db.load(
+            chapter_id
+        )
+
+        previous_results = (
+            self._get_completed_chunks(progress)
+        )
 
         current_state = initial_context_state
         results = []
 
         for chunk in chunks:
-            existing = previous_results.get(chunk.chunk_id)
+            existing = previous_results.get(
+                chunk.chunk_id
+            )
 
             if existing is not None:
-                processed = self._restore_processed_chunk(existing)
-                current_state = processed.context_state
+                processed = (
+                    self._restore_processed_chunk(
+                        existing
+                    )
+                )
+
+                current_state = (
+                    processed.context_state
+                )
+
                 results.append(processed)
                 continue
 
@@ -55,31 +77,46 @@ class ChapterProcessor:
                 chunk=chunk,
                 chapter_context=chapter_context,
                 context_state=current_state,
-                entity_resolutions=entity_resolutions or [],
+                entity_resolutions=(
+                    entity_resolutions or []
+                ),
             )
 
-            current_state = processed.context_state
+            current_state = (
+                processed.context_state
+            )
+
             results.append(processed)
 
             self.progress_db.save_chunk(
                 chapter_id=chapter_id,
                 chunk_id=processed.chunk_id,
                 translation=processed.translation,
-                context_state=processed.context_state.to_dict(),
+                context_state=(
+                    processed.context_state.to_dict()
+                ),
                 attempts=processed.attempts,
                 qa_passed=processed.qa_passed,
                 flagged=processed.flagged,
                 qa_issues=processed.issues,
-                paragraph_translations=processed.paragraph_translations,
+                paragraph_translations=(
+                    processed.paragraph_translations
+                ),
+                cache_hit=processed.cache_hit,
             )
 
-        self.progress_db.mark_completed(chapter_id)
+        self.progress_db.mark_completed(
+            chapter_id
+        )
 
         return results
 
     @staticmethod
     def _get_completed_chunks(progress):
-        chunks_data = progress.get("chunks", [])
+        chunks_data = progress.get(
+            "chunks",
+            []
+        )
 
         if isinstance(chunks_data, dict):
             items = []
@@ -87,7 +124,10 @@ class ChapterProcessor:
             for chunk_id, item in chunks_data.items():
                 if isinstance(item, dict):
                     normalized = dict(item)
-                    normalized.setdefault("chunk_id", chunk_id)
+                    normalized.setdefault(
+                        "chunk_id",
+                        chunk_id,
+                    )
                     items.append(normalized)
 
             return {
@@ -100,9 +140,11 @@ class ChapterProcessor:
             return {
                 item["chunk_id"]: item
                 for item in chunks_data
-                if isinstance(item, dict)
-                and item.get("qa_passed") is True
-                and item.get("chunk_id")
+                if (
+                    isinstance(item, dict)
+                    and item.get("qa_passed") is True
+                    and item.get("chunk_id")
+                )
             }
 
         return {}
@@ -114,15 +156,21 @@ class ChapterProcessor:
         context_state,
         entity_resolutions,
     ):
-        result = self.retry_controller.translate_with_retry(
-            chunk=chunk,
-            chapter_context=chapter_context,
-            context_state=context_state,
-            entity_resolutions=entity_resolutions,
+        result = (
+            self.retry_controller.translate_with_retry(
+                chunk=chunk,
+                chapter_context=chapter_context,
+                context_state=context_state,
+                entity_resolutions=entity_resolutions,
+            )
         )
 
         translation = str(
-            getattr(result, "translation", "")
+            getattr(
+                result,
+                "translation",
+                "",
+            )
         )
 
         new_state = getattr(
@@ -132,7 +180,11 @@ class ChapterProcessor:
         )
 
         flagged = bool(
-            getattr(result, "flagged", False)
+            getattr(
+                result,
+                "flagged",
+                False,
+            )
         )
 
         qa_result = getattr(
@@ -169,24 +221,47 @@ class ChapterProcessor:
             )
         )
 
+        # Cache HIT memiliki attempts == 0 karena
+        # RetryController tidak memanggil translation engine.
+        cache_hit = False
+
+        history = getattr(
+            result,
+            "history",
+            [],
+        )
+
+        if (
+            isinstance(history, list)
+            and history
+            and history[0].get("source")
+            == "cache"
+        ):
+            cache_hit = True
+
         if attempts == 0:
             attempts = 1
 
-        paragraph_translations = self._get_paragraph_translations(
-            result,
-            chunk,
-            translation,
+        paragraph_translations = (
+            self._get_paragraph_translations(
+                result,
+                chunk,
+                translation,
+            )
         )
 
         return ProcessedChunk(
             chunk_id=chunk.chunk_id,
             translation=translation,
-            paragraph_translations=paragraph_translations,
+            paragraph_translations=(
+                paragraph_translations
+            ),
             context_state=new_state,
             attempts=attempts,
             qa_passed=qa_passed,
             flagged=flagged,
             issues=issues,
+            cache_hit=cache_hit,
         )
 
     @staticmethod
@@ -311,6 +386,12 @@ class ChapterProcessor:
                         "issues",
                         [],
                     ),
+                )
+            ),
+            cache_hit=bool(
+                data.get(
+                    "cache_hit",
+                    False,
                 )
             ),
         )

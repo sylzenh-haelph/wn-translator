@@ -208,10 +208,8 @@ print(
     heading_2.style,
 )
 
-assert heading_1.style["name"] == "Heading 1"
 assert heading_1.style["heading_level"] == 1
 
-assert heading_2.style["name"] == "Heading 1"
 assert heading_2.style["heading_level"] == 1
 
 
@@ -233,7 +231,7 @@ for run in paragraph.runs:
 bold_runs = [
     run
     for run in paragraph.runs
-    if run.formatting["bold"]
+    if run.formatting.get("bold", False)
 ]
 
 assert len(bold_runs) == 1

@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 from urllib.parse import unquote
@@ -157,7 +158,9 @@ def _get_text_formatting(tag):
 
 
 def _normalize_text(text):
-    return " ".join(text.split())
+    # Collapse internal whitespace while preserving leading/trailing
+    # whitespace that may be meaningful at TextRun boundaries.
+    return re.sub(r"\s+", " ", text)
 
 
 def _extract_runs(paragraph_tag):

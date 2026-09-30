@@ -4,17 +4,18 @@ from research.entity_db import EntityDB
 from research.entity_resolution_service import (
     EntityResolutionService,
 )
+from storage.glossary_db import GlossaryDB
+from storage.user_rule_db import UserRuleDB
 
 
-def fresh_db():
-    path = Path(
-        "temp/test_resolution_service_db.json"
-    )
+def fresh_path(name):
+    path = Path("temp") / name
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     if path.exists():
         path.unlink()
 
-    return EntityDB(path)
+    return path
 
 
 def show(label, result):
@@ -28,20 +29,55 @@ def show(label, result):
     print("Reason      :", result.reason)
 
 
-def main():
-    db = fresh_db()
+def build_service():
+    entity_db = EntityDB(
+        fresh_path("test_resolution_service_entities.json")
+    )
 
-    db.add(
+    glossary_db = GlossaryDB(
+        fresh_path("test_resolution_service_glossary.json")
+    )
+
+    user_rule_db = UserRuleDB(
+        fresh_path("test_resolution_service_rules.json")
+    )
+
+    return (
+        entity_db,
+        glossary_db,
+        user_rule_db,
+        EntityResolutionService(
+            entity_db=entity_db,
+            glossary_db=glossary_db,
+            user_rule_db=user_rule_db,
+        ),
+    )
+
+
+def main():
+    (
+        entity_db,
+        glossary_db,
+        user_rule_db,
+        service,
+    ) = build_service()
+
+    # --------------------------------------------------
+    # TEST 1
+    # Research exists, but research evidence alone
+    # must NOT become a translation.
+    # --------------------------------------------------
+    entity_db.add(
         canonical_name="Silver Sword",
         entity_type="item",
         translation=None,
         aliases=[],
         locked=False,
-        source="ai_classifier",
+        source="research",
         notes="Named weapon.",
     )
 
-    db.add_research(
+    entity_db.add_research(
         entity_type="item",
         canonical_name="Silver Sword",
         evidence={
@@ -56,16 +92,7 @@ def main():
         },
     )
 
-    service = EntityResolutionService(db)
-
-    # --------------------------------------------------
-    # TEST 1
-    # Research exists, but is NOT automatically
-    # converted into a translation.
-    # --------------------------------------------------
-    result = service.resolve(
-        "Silver Sword"
-    )
+    result = service.resolve("Silver Sword")
 
     show("RESEARCH IS EVIDENCE ONLY", result)
 
@@ -74,15 +101,15 @@ def main():
 
     # --------------------------------------------------
     # TEST 2
-    # Glossary provides translation.
+    # Glossary DB provides the translation.
     # --------------------------------------------------
-    result = service.resolve(
-        "Silver Sword",
-        glossary={
-            "value": "Pedang Perak",
-            "reason": "Glossary entry.",
-        },
+    glossary_db.add(
+        term="Silver Sword",
+        translation="Pedang Perak",
+        notes="Glossary entry.",
     )
+
+    result = service.resolve("Silver Sword")
 
     show("GLOSSARY", result)
 
@@ -91,86 +118,115 @@ def main():
 
     # --------------------------------------------------
     # TEST 3
-    # User Rule overrides Glossary.
+    # User rule overrides glossary.
     # --------------------------------------------------
-    result = service.resolve(
-        "Silver Sword",
-        user_rule={
-            "value": "Pedang Perak Sakti",
-            "reason": "User rule.",
-        },
-        glossary={
-            "value": "Pedang Perak",
-            "reason": "Glossary entry.",
-        },
+    user_rule_db.add(
+        rule_id="silver_sword_rule",
+        rule_type="translation",
+        target="Silver Sword",
+        value="Pedang Perak Sakti",
+        locked=False,
+        notes="User rule.",
     )
+
+    result = service.resolve("Silver Sword")
 
     show("USER RULE > GLOSSARY", result)
 
-    assert result.translation == (
-        "Pedang Perak Sakti"
-    )
+    assert result.translation == "Pedang Perak Sakti"
     assert result.source == "user_rule"
 
     # --------------------------------------------------
     # TEST 4
-    # Locked DB translation becomes User Lock.
+    # User lock overrides everything.
     # --------------------------------------------------
-    db.update(
-        "item",
-        "Silver Sword",
-        translation="Pedang Perak",
+    user_rule_db.add(
+        rule_id="silver_sword_lock",
+        rule_type="translation",
+        target="Silver Sword",
+        value="Pedang Bulan",
         locked=True,
+        notes="Permanent user lock.",
     )
 
-    result = service.resolve(
-        "Silver Sword",
-        user_rule={
-            "value": "Pedang Perak Sakti",
-            "reason": "User rule.",
-        },
-        glossary={
-            "value": "Pedang",
-            "reason": "Glossary entry.",
-        },
-        ai_context={
-            "value": "Pedang Perak",
-            "reason": "Chapter context.",
-        },
-    )
+    result = service.resolve("Silver Sword")
 
-    show("LOCKED DB > EVERYTHING", result)
+    show("USER LOCK > EVERYTHING", result)
 
-    assert result.translation == "Pedang Perak"
+    assert result.translation == "Pedang Bulan"
     assert result.source == "user_lock"
     assert result.locked is True
 
     # --------------------------------------------------
     # TEST 5
-    # Character DB translation.
+    # Character DB overrides glossary.
     # --------------------------------------------------
-    db.add(
+    (
+        entity_db_2,
+        glossary_db_2,
+        user_rule_db_2,
+        service_2,
+    ) = build_service()
+
+    entity_db_2.add(
         canonical_name="Alice",
         entity_type="character",
         translation="Alice",
         aliases=[],
         locked=False,
-        source="user",
+        source="research",
         notes="Character translation.",
     )
 
-    result = service.resolve(
-        "Alice",
-        glossary={
-            "value": "Alisa",
-            "reason": "Glossary.",
-        },
+    glossary_db_2.add(
+        term="Alice",
+        translation="Alisa",
+        notes="Glossary.",
     )
+
+    result = service_2.resolve("Alice")
 
     show("CHARACTER DB > GLOSSARY", result)
 
     assert result.translation == "Alice"
     assert result.source == "character_db"
+
+    # --------------------------------------------------
+    # TEST 6
+    # AI context is used when no stronger persistent
+    # resolution source exists.
+    # --------------------------------------------------
+    (
+        _entity_db_3,
+        _glossary_db_3,
+        _user_rule_db_3,
+        service_3,
+    ) = build_service()
+
+    result = service_3.resolve(
+        "Unknown Term",
+        ai_context={
+            "Unknown Term": "Istilah Tidak Dikenal",
+        },
+    )
+
+    show("AI CONTEXT", result)
+
+    assert result.translation == "Istilah Tidak Dikenal"
+    assert result.source == "ai_context"
+
+    # --------------------------------------------------
+    # TEST 7
+    # Completely unknown entity has no resolution.
+    # --------------------------------------------------
+    result = service_3.resolve(
+        "Completely Unknown",
+    )
+
+    show("NOTHING", result)
+
+    assert result.translation is None
+    assert result.source == "none"
 
     print("\nPASS")
 
