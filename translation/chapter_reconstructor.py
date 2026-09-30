@@ -57,6 +57,23 @@ class ChapterReconstructor:
             else None
         )
 
+        if preserved_heading is not None:
+            preserved_heading.runs = [
+                TextRun(
+                    text=title,
+                    formatting=deepcopy(run.formatting),
+                )
+                for run in preserved_heading.runs
+            ]
+
+            if not preserved_heading.runs:
+                preserved_heading.runs.append(
+                    TextRun(
+                        text=title,
+                        formatting={},
+                    )
+                )
+
         return ReconstructedChapter(
             chapter_id=chapter_id,
             title=title,

@@ -15,6 +15,7 @@ from research.runtime import build_research_service
 from storage.logger import ProjectLogger
 from translation.chapter_reconstructor import ChapterReconstructor
 from translation.chapter_splitter import DocumentChapterSplitter
+from translation.chapter_title_translator import ChapterTitleTranslator
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
@@ -202,6 +203,7 @@ def process_chapters(
 
     assembler = ChapterTranslationAssembler()
     reconstructor = ChapterReconstructor()
+    title_translator = ChapterTitleTranslator(processor.translation_engine.client)
 
     translated_chapters = []
 
@@ -242,10 +244,27 @@ def process_chapters(
                     f"{chapter.chapter_id}"
                 )
 
+            bilingual_title = title_translator.translate(
+                title=chapter.title,
+                entity_resolutions=[],
+            )
+            chapter.translated_title = bilingual_title
+
+            print(
+                f"  Title     : {bilingual_title}"
+            )
+
+            if logger:
+                logger.info(
+                    f"Chapter title translated: "
+                    f"{chapter.chapter_id} | "
+                    f"{bilingual_title}"
+                )
+
             translated_chapters.append(
                 reconstructor.reconstruct(
                     chapter_id=chapter.chapter_id,
-                    title=chapter.title,
+                    title=bilingual_title,
                     source_paragraphs=[],
                     translated_paragraphs=[],
                     heading=chapter.heading,
@@ -311,6 +330,23 @@ def process_chapters(
                         f"status={entity.status} | "
                         f"source={entity.source}"
                     )
+
+        bilingual_title = title_translator.translate(
+            title=chapter.title,
+            entity_resolutions=resolved_entities,
+        )
+        chapter.translated_title = bilingual_title
+
+        print(
+            f"  Title     : {bilingual_title}"
+        )
+
+        if logger:
+            logger.info(
+                f"Chapter title translated: "
+                f"{chapter.chapter_id} | "
+                f"{bilingual_title}"
+            )
 
         chunks = build_chunks(
             chapter.paragraphs,
@@ -399,7 +435,7 @@ def process_chapters(
         translated_chapters.append(
             reconstructor.reconstruct(
                 chapter_id=chapter.chapter_id,
-                title=chapter.title,
+                title=bilingual_title,
                 source_paragraphs=chapter.paragraphs,
                 translated_paragraphs=translated_paragraphs,
                 heading=chapter.heading,

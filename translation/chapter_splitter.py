@@ -7,10 +7,13 @@ from models.document import Document, Paragraph
 class DocumentChapter:
     chapter_id: str
     title: str
-    paragraphs: list[Paragraph] = field(
-        default_factory=list
-    )
+    paragraphs: list[Paragraph] = field(default_factory=list)
     heading: Paragraph | None = None
+    translated_title: str | None = None
+
+    @property
+    def display_title(self) -> str:
+        return self.translated_title or self.title
 
 
 class DocumentChapterSplitter:
@@ -218,8 +221,8 @@ class DocumentChapterSplitter:
                     )
 
                     chapter_number += 1
-                    current_paragraphs = []
 
+                current_paragraphs = []
                 current_title = paragraph.text.strip()
                 current_heading = paragraph
                 continue
