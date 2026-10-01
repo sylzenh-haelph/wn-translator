@@ -15,6 +15,7 @@ from research.runtime import build_research_service
 from storage.logger import ProjectLogger
 from storage.progress_db import ProgressDB
 from translation.chapter_reconstructor import ChapterReconstructor
+from models.document import Document
 from translation.chapter_splitter import DocumentChapterSplitter
 from translation.chapter_title_translator import ChapterTitleTranslator
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
@@ -192,12 +193,305 @@ def reconstruct_output(
     )
 
 
+def _safe_chapter_filename(chapter, index, suffix):
+    import re
+
+    title = (
+        getattr(chapter, "translated_title", None)
+        or getattr(chapter, "title", None)
+        or f"Chapter {index}"
+    )
+
+    title = re.sub(r"^Chapter\s+\d+\s*:\s*", "", title, flags=re.I)
+    title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title)
+    title = re.sub(r"\s+", " ", title).strip(" ._")
+
+    if not title:
+        title = "untitled"
+
+    return f"chapter-{index:02d}-{title}{suffix}"
+
+
+def _build_chapter_document(
+    source_document,
+    chapter,
+):
+    from copy import deepcopy
+
+    paragraphs = []
+
+    if chapter.heading is not None:
+        heading = deepcopy(chapter.heading)
+
+        translated_title = (
+            getattr(chapter, "translated_title", None)
+            or chapter.title
+        )
+
+        if heading.runs:
+            heading.runs[0].text = translated_title
+            for run in heading.runs[1:]:
+                run.text = ""
+        else:
+            heading.runs.append(
+                TextRun(
+                    text=translated_title,
+                    formatting={},
+                )
+            )
+
+        paragraphs.append(heading)
+
+    paragraphs.extend(chapter.paragraphs)
+
+    metadata = {}
+
+    if source_document.metadata:
+        metadata = source_document.metadata.copy()
+
+    epub = metadata.get("epub")
+
+    if epub:
+        from copy import deepcopy
+
+        structure = deepcopy(epub)
+
+        paragraph_ids = {
+            paragraph.id
+            for paragraph in paragraphs
+        }
+
+        paragraph_map = structure.get(
+            "paragraph_spine_map",
+            {},
+        )
+
+        idrefs = []
+        for paragraph_id in paragraph_ids:
+            idref = paragraph_map.get(paragraph_id)
+            if idref and idref not in idrefs:
+                idrefs.append(idref)
+
+        if idrefs:
+            structure["spine"] = [
+                idref
+                for idref in structure.get("spine", [])
+                if idref in idrefs
+            ]
+
+            structure["paragraph_spine_map"] = {
+                paragraph_id: idref
+                for paragraph_id, idref in paragraph_map.items()
+                if paragraph_id in paragraph_ids
+            }
+
+            structure["xhtml_sources"] = {
+                idref: source
+                for idref, source in structure.get(
+                    "xhtml_sources",
+                    {},
+                ).items()
+                if idref in idrefs
+            }
+
+            structure["spine_stylesheets"] = {
+                idref: styles
+                for idref, styles in structure.get(
+                    "spine_stylesheets",
+                    {},
+                ).items()
+                if idref in idrefs
+            }
+
+            manifest = structure.get("manifest", {})
+            structure["manifest"] = {
+                manifest_id: item
+                for manifest_id, item in manifest.items()
+                if (
+                    manifest_id in idrefs
+                    or str(item.get("media_type", "")).lower()
+                    not in {
+                        "application/xhtml+xml",
+                        "application/x-dtbncx+xml",
+                    }
+                )
+            }
+
+            # Chapter export berdiri sendiri, jadi jangan
+            # membawa TOC/NCX novel penuh.
+            structure.pop("navigation_items", None)
+
+            spine_attributes = dict(
+                structure.get("spine_attributes", {})
+            )
+            spine_attributes.pop("toc", None)
+            structure["spine_attributes"] = spine_attributes
+
+        metadata["epub"] = structure
+
+    return Document(
+        title=source_document.title,
+        author=source_document.author,
+        paragraphs=paragraphs,
+        metadata=metadata,
+    )
+
+
+def _prune_chapter_epub(
+    epub_path: Path,
+    chapter_document,
+):
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    structure = chapter_document.metadata.get("epub", {})
+    sources = structure.get("xhtml_sources", {})
+    spine = structure.get("spine", [])
+
+    keep_xhtml = set()
+
+    for idref in spine:
+        source = sources.get(idref)
+
+        if isinstance(source, dict):
+            path = source.get("path")
+        else:
+            path = source
+
+        if path:
+            keep_xhtml.add(str(path).lstrip("/"))
+
+    if not keep_xhtml:
+        raise RuntimeError(
+            "Tidak dapat menentukan XHTML chapter yang harus dipertahankan."
+        )
+
+    temp_path = epub_path.with_suffix(".chapter-pruned.epub")
+
+    try:
+        with ZipFile(epub_path, "r") as source_zip:
+            with ZipFile(
+                temp_path,
+                "w",
+                compression=ZIP_DEFLATED,
+            ) as output_zip:
+                for info in source_zip.infolist():
+                    name = info.filename
+                    normalized = name.lstrip("/")
+
+                    if normalized.lower().endswith(
+                        (".xhtml", ".html", ".htm")
+                    ):
+                        if normalized not in keep_xhtml:
+                            continue
+
+                    if normalized.lower().endswith(".ncx"):
+                        continue
+
+                    output_zip.writestr(
+                        info,
+                        source_zip.read(name),
+                    )
+
+        temp_path.replace(epub_path)
+
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def export_chapter(
+    input_path: Path,
+    source_document,
+    chapter,
+    index: int,
+    output_dir: Path,
+    suffix: str,
+    logger: ProjectLogger | None = None,
+):
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    filename = _safe_chapter_filename(
+        chapter,
+        index,
+        suffix,
+    )
+
+    output_path = output_dir / filename
+    temp_dir, temp_output = create_safe_output_path(
+        output_path
+    )
+
+    try:
+        chapter_document = _build_chapter_document(
+            source_document,
+            chapter,
+        )
+
+        reconstruct_output(
+            input_path,
+            chapter_document,
+            temp_output,
+        )
+
+        if temp_output.suffix.lower() == ".epub":
+            _prune_chapter_epub(
+                temp_output,
+                chapter_document,
+            )
+
+        validate_output(
+            temp_output,
+            logger=logger,
+        )
+
+        shutil.move(
+            str(temp_output),
+            str(output_path),
+        )
+
+        print(
+            f"  Chapter export: {output_path}"
+        )
+
+        if logger:
+            logger.info(
+                f"Chapter export completed: "
+                f"{chapter.chapter_id} | "
+                f"{output_path}"
+            )
+
+    except Exception as exc:
+        print(
+            f"  WARNING: chapter export gagal: "
+            f"{chapter.chapter_id} | {exc}"
+        )
+
+        if logger:
+            logger.warning(
+                f"Chapter export failed: "
+                f"{chapter.chapter_id} | {exc}"
+            )
+
+    finally:
+        shutil.rmtree(
+            temp_dir,
+            ignore_errors=True,
+        )
+
+
 def process_chapters(
     document,
     processor,
     config,
     logger: ProjectLogger | None = None,
     entity_service=None,
+    export_chapters: bool = False,
+    chapter_output_dir: Path | None = None,
+    output_suffix: str = ".epub",
+    input_path: Path | None = None,
 ):
     splitter = DocumentChapterSplitter()
     chapters = splitter.split(document)
@@ -262,15 +556,32 @@ def process_chapters(
                     f"{bilingual_title}"
                 )
 
-            translated_chapters.append(
-                reconstructor.reconstruct(
-                    chapter_id=chapter.chapter_id,
-                    title=bilingual_title,
-                    source_paragraphs=[],
-                    translated_paragraphs=[],
-                    heading=chapter.heading,
-                )
+            reconstructed_chapter = reconstructor.reconstruct(
+                chapter_id=chapter.chapter_id,
+                title=bilingual_title,
+                source_paragraphs=[],
+                translated_paragraphs=[],
+                heading=chapter.heading,
             )
+
+            translated_chapters.append(
+                reconstructed_chapter
+            )
+
+            if (
+                export_chapters
+                and chapter_output_dir is not None
+                and input_path is not None
+            ):
+                export_chapter(
+                    input_path=input_path,
+                    source_document=document,
+                    chapter=chapter,
+                    index=index,
+                    output_dir=chapter_output_dir,
+                    suffix=output_suffix,
+                    logger=logger,
+                )
 
             continue
 
@@ -433,15 +744,32 @@ def process_chapters(
             for paragraph in chapter.paragraphs
         ]
 
-        translated_chapters.append(
-            reconstructor.reconstruct(
-                chapter_id=chapter.chapter_id,
-                title=bilingual_title,
-                source_paragraphs=chapter.paragraphs,
-                translated_paragraphs=translated_paragraphs,
-                heading=chapter.heading,
-            )
+        reconstructed_chapter = reconstructor.reconstruct(
+            chapter_id=chapter.chapter_id,
+            title=bilingual_title,
+            source_paragraphs=chapter.paragraphs,
+            translated_paragraphs=translated_paragraphs,
+            heading=chapter.heading,
         )
+
+        translated_chapters.append(
+            reconstructed_chapter
+        )
+
+        if (
+            export_chapters
+            and chapter_output_dir is not None
+            and input_path is not None
+        ):
+            export_chapter(
+                input_path=input_path,
+                source_document=document,
+                chapter=chapter,
+                index=index,
+                output_dir=chapter_output_dir,
+                suffix=output_suffix,
+                logger=logger,
+            )
 
         if logger:
             logger.info(
@@ -547,6 +875,18 @@ def build_parser():
         "--status",
         action="store_true",
         help="Tampilkan status progress tanpa menjalankan translation",
+    )
+
+    parser.add_argument(
+        "--export-chapters",
+        action="store_true",
+        help="Export setiap chapter segera setelah selesai diterjemahkan",
+    )
+
+    parser.add_argument(
+        "--chapter-output-dir",
+        default=None,
+        help="Direktori output chapter; default: <output>_chapters",
     )
 
     parser.add_argument(
@@ -840,12 +1180,38 @@ def main():
                 "Entity research initialization completed"
             )
 
+        chapter_output_dir = None
+
+        if args.export_chapters:
+            if args.chapter_output_dir is not None:
+                chapter_output_dir = Path(
+                    args.chapter_output_dir
+                )
+            else:
+                chapter_output_dir = (
+                    output_path.parent
+                    / f"{output_path.stem}_chapters"
+                )
+
+            print(
+                f"Chapter exports: {chapter_output_dir}"
+            )
+
+            logger.info(
+                f"Chapter export enabled: "
+                f"{chapter_output_dir}"
+            )
+
         translated_chapters = process_chapters(
             document,
             processor,
             config,
             logger=logger,
             entity_service=entity_service,
+            export_chapters=args.export_chapters,
+            chapter_output_dir=chapter_output_dir,
+            output_suffix=output_path.suffix.lower(),
+            input_path=input_path,
         )
 
         print()
