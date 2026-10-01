@@ -13,6 +13,7 @@ from reconstruction.epub_reconstructor import reconstruct_epub
 from reconstruction.epub_validator import validate_epub
 from research.runtime import build_research_service
 from storage.logger import ProjectLogger
+from storage.progress_db import ProgressDB
 from translation.chapter_reconstructor import ChapterReconstructor
 from translation.chapter_splitter import DocumentChapterSplitter
 from translation.chapter_title_translator import ChapterTitleTranslator
@@ -451,6 +452,80 @@ def process_chapters(
     return translated_chapters
 
 
+def show_status(input_path: Path, project_dir: Path):
+    """Display translation progress without running translation."""
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Input tidak ditemukan: {input_path}"
+        )
+
+    if not input_path.is_file():
+        raise ValueError(
+            f"Input bukan file: {input_path}"
+        )
+
+    if input_path.suffix.lower() not in SUPPORTED_INPUTS:
+        raise ValueError(
+            f"Format input tidak didukung: {input_path.suffix}"
+        )
+
+    config = load_config(project_dir=project_dir)
+
+    progress_path = Path(config.progress_dir)
+    if not progress_path.is_absolute():
+        progress_path = project_dir / progress_path
+
+    document = parse_document(input_path)
+    chapters = DocumentChapterSplitter().split(document)
+    progress_db = ProgressDB(progress_path)
+
+    print("=" * 60)
+    print("WN TRANSLATOR STATUS")
+    print("=" * 60)
+    print(f"Novel  : {document.title}")
+    print(f"Author : {document.author}")
+    print(f"Input  : {input_path}")
+    print(f"Project: {project_dir}")
+    print(f"Progress: {progress_path}")
+    print()
+
+    completed = 0
+    in_progress = 0
+    not_started = 0
+
+    for index, chapter in enumerate(chapters, start=1):
+        data = progress_db.load(chapter.chapter_id)
+        status = data["status"]
+
+        chunks = data.get("chunks", {})
+        completed_chunks = data.get("completed_chunks", [])
+        flagged_chunks = data.get("flagged_chunks", [])
+
+        if status == "completed":
+            completed += 1
+        elif status == "in_progress":
+            in_progress += 1
+        else:
+            not_started += 1
+
+        print(f"[{index}/{len(chapters)}] {chapter.title}")
+        print(f"  Status  : {status}")
+        print(
+            f"  Chunks  : "
+            f"{len(completed_chunks)}/{len(chunks)} completed"
+        )
+        print(f"  Flagged : {len(flagged_chunks)}")
+        print()
+
+    print("-" * 60)
+    print("SUMMARY")
+    print("-" * 60)
+    print(f"Completed   : {completed}")
+    print(f"In progress : {in_progress}")
+    print(f"Not started : {not_started}")
+    print(f"Total       : {len(chapters)}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description="WN Translator"
@@ -464,8 +539,14 @@ def build_parser():
     parser.add_argument(
         "-o",
         "--output",
-        required=True,
+        required=False,
         help="Path file EPUB/DOCX hasil",
+    )
+
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Tampilkan status progress tanpa menjalankan translation",
     )
 
     parser.add_argument(
@@ -529,8 +610,29 @@ def main():
     args = parser.parse_args()
 
     input_path = Path(args.input)
-    output_path = Path(args.output)
+    output_path = (
+        Path(args.output)
+        if args.output is not None
+        else None
+    )
     project_dir = Path(args.project_dir)
+
+    if args.status:
+        try:
+            show_status(
+                input_path=input_path,
+                project_dir=project_dir,
+            )
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            raise SystemExit(1)
+
+        return
+
+    if output_path is None:
+        parser.error(
+            "--output/-o wajib diisi kecuali menggunakan --status"
+        )
 
     logger = ProjectLogger(
         log_dir=project_dir / "logs"
