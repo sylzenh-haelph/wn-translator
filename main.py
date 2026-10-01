@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 from config.settings import load_config
@@ -14,6 +15,7 @@ from reconstruction.epub_validator import validate_epub
 from research.runtime import build_research_service
 from storage.logger import ProjectLogger
 from storage.progress_db import ProgressDB
+from storage.translation_stats import TranslationStats
 from translation.chapter_reconstructor import ChapterReconstructor
 from models.document import Document
 from translation.chapter_splitter import DocumentChapterSplitter
@@ -501,6 +503,8 @@ def process_chapters(
     title_translator = ChapterTitleTranslator(processor.translation_engine.client)
 
     translated_chapters = []
+    stats = TranslationStats()
+    translation_started = time.monotonic()
 
     print()
     print("[2/4] Translating chapters...")
@@ -567,6 +571,13 @@ def process_chapters(
             translated_chapters.append(
                 reconstructed_chapter
             )
+
+            stats.add_chapter(
+                chapter_id=chapter.chapter_id,
+                title=bilingual_title,
+                paragraphs=len(chapter.paragraphs),
+            )
+            stats.mark_skipped_chapter()
 
             if (
                 export_chapters
@@ -756,6 +767,15 @@ def process_chapters(
             reconstructed_chapter
         )
 
+        stats.add_chapter(
+            chapter_id=chapter.chapter_id,
+            title=bilingual_title,
+            paragraphs=len(chapter.paragraphs),
+            processed_chunks=result,
+            entities=resolved_entities,
+        )
+        stats.mark_completed_chapter()
+
         if (
             export_chapters
             and chapter_output_dir is not None
@@ -777,7 +797,8 @@ def process_chapters(
                 f"{chapter.chapter_id}"
             )
 
-    return translated_chapters
+    stats.finish(time.monotonic() - translation_started)
+    return translated_chapters, stats
 
 
 def show_status(input_path: Path, project_dir: Path):
@@ -1202,7 +1223,7 @@ def main():
                 f"{chapter_output_dir}"
             )
 
-        translated_chapters = process_chapters(
+        translated_chapters, translation_stats = process_chapters(
             document,
             processor,
             config,
@@ -1213,6 +1234,44 @@ def main():
             output_suffix=output_path.suffix.lower(),
             input_path=input_path,
         )
+
+        stats_path = project_dir / "stats" / "translation_stats.json"
+        translation_stats.save(stats_path)
+
+        summary = translation_stats.summary()
+
+        print()
+        print("TRANSLATION STATISTICS")
+        print("-" * 60)
+        print(
+            f"Chapters       : {summary['completed_chapters']}/"
+            f"{summary['chapters']}"
+        )
+        print(f"Paragraphs     : {summary['paragraphs']}")
+        print(
+            f"Chunks         : {summary['completed_chunks']}/"
+            f"{summary['chunks']} completed"
+        )
+        print(f"Flagged chunks : {summary['flagged_chunks']}")
+        print(
+            f"QA             : {summary['qa_passed']} passed / "
+            f"{summary['qa_failed']} failed"
+        )
+        print(f"Attempts       : {summary['attempts']}")
+        print(f"Retries        : {summary['retries']}")
+        print(
+            f"Cache          : {summary['cache_hits']} hit / "
+            f"{summary['cache_misses']} miss"
+        )
+        print(f"Entities       : {summary['entities']}")
+        print(f"Research fail  : {summary['research_failed']}")
+        print(f"Duration       : {summary['duration_seconds']:.2f}s")
+        print(f"Stats file     : {stats_path}")
+
+        if logger:
+            logger.info(
+                f"Translation statistics saved: {stats_path}"
+            )
 
         print()
         print(
