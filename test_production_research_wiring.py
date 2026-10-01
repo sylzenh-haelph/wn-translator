@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import main
 
 from main import process_chapters
 from models.document import Document, Paragraph, TextRun
@@ -30,6 +31,9 @@ class FakeEntityService:
 class FakeProcessor:
     def __init__(self):
         self.calls = []
+        self.translation_engine = SimpleNamespace(
+            client=SimpleNamespace()
+        )
 
     def process_chapter(
         self,
@@ -67,6 +71,17 @@ class FakeProcessor:
         return results
 
 
+class FakeTitleTranslator:
+    def __init__(self, client):
+        self.client = client
+
+    def translate(self, title, entity_resolutions=None):
+        return f"{title} (ID)"
+
+
+main.ChapterTitleTranslator = FakeTitleTranslator
+
+
 document = Document(
     title="Research Wiring Test",
     author="Test Author",
@@ -95,7 +110,7 @@ document = Document(
 entity_service = FakeEntityService()
 processor = FakeProcessor()
 
-results = process_chapters(
+results, stats = process_chapters(
     document=document,
     processor=processor,
     config=SimpleNamespace(

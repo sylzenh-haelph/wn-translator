@@ -105,9 +105,17 @@ class ChapterProcessor:
                 cache_hit=processed.cache_hit,
             )
 
-        self.progress_db.mark_completed(
-            chapter_id
-        )
+        if results and all(
+            processed.qa_passed
+            for processed in results
+        ):
+            self.progress_db.mark_completed(
+                chapter_id
+            )
+        else:
+            self.progress_db.start_chapter(
+                chapter_id
+            )
 
         return results
 

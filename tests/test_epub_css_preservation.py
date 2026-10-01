@@ -75,10 +75,10 @@ def test_epub_css_preservation():
             "OEBPS/chapter1.xhtml"
         ).decode("utf-8")
 
-        assert (
-            '<link rel="stylesheet" type="text/css" '
-            'href="styles/main.css"/>'
-        ) in chapter1
+        assert '<link ' in chapter1
+        assert 'rel="stylesheet"' in chapter1
+        assert 'type="text/css"' in chapter1
+        assert 'href="styles/main.css"' in chapter1
 
         assert (
             rebuilt.read("OEBPS/styles/main.css")

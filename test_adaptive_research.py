@@ -39,39 +39,44 @@ class AdaptiveMockProvider(ResearchProvider):
         ]
 
 
-provider = AdaptiveMockProvider()
-client = GeminiClient()
+def main():
+    provider = AdaptiveMockProvider()
+    client = GeminiClient()
 
-engine = AdaptiveResearchEngine(
-    provider=provider,
-    client=client,
-    max_attempts=4,
-)
+    engine = AdaptiveResearchEngine(
+        provider=provider,
+        client=client,
+        max_attempts=4,
+    )
 
-result = engine.research(
-    entity_text="Silver Sword",
-    entity_type="item",
-    novel_title="Example Novel",
-    author="Example Author",
-    chapter_context=(
-        "The Silver Sword was lying on the table "
-        "after the battle."
-    ),
-)
+    result = engine.research(
+        entity_text="Silver Sword",
+        entity_type="item",
+        novel_title="Example Novel",
+        author="Example Author",
+        chapter_context=(
+            "The Silver Sword was lying on the table "
+            "after the battle."
+        ),
+    )
 
-print("=== ADAPTIVE RESEARCH ===")
-print("Success       :", result.success)
-print("Entity        :", result.entity_text)
-print("Type          :", result.entity_type)
-print("Attempts      :", result.attempts)
-print("Confidence    :", result.confidence)
-print("Final query   :", result.final_query)
-print("Failed        :", result.research_failed)
-print("Reason        :", result.reason)
+    print("=== ADAPTIVE RESEARCH ===")
+    print("Success       :", result.success)
+    print("Entity        :", result.entity_text)
+    print("Type          :", result.entity_type)
+    print("Attempts      :", result.attempts)
+    print("Confidence    :", result.confidence)
+    print("Final query   :", result.final_query)
+    print("Failed        :", result.research_failed)
+    print("Reason        :", result.reason)
 
-print("\nEvidence:")
+    print("\nEvidence:")
 
-for evidence in result.evidence:
-    print("-", evidence.title)
-    print(" ", evidence.url)
-    print(" ", evidence.snippet)
+    for evidence in result.evidence:
+        print("-", evidence.title)
+        print(" ", evidence.url)
+        print(" ", evidence.snippet)
+
+
+if __name__ == "__main__":
+    main()

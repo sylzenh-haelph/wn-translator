@@ -1,4 +1,10 @@
 from pathlib import Path
+import sys
+
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parent.parent),
+)
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
@@ -122,7 +128,12 @@ def test_build_chapter_document():
 
     assert "toc" not in result.metadata["epub"]["spine_attributes"]
 
-    assert "chapter2" in result.metadata["epub"]["manifest"]
+    assert result.metadata["epub"]["manifest"] == {
+        "chapter1": {
+            "href": "Text/chapter1.xhtml",
+            "media_type": "application/xhtml+xml",
+        },
+    }
 
 
 if __name__ == "__main__":

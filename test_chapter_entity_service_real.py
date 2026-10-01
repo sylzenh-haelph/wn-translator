@@ -88,158 +88,163 @@ class FakeResearchClient:
         )
 
 
-# ============================================================
-# MOCK RESEARCH PROVIDER
-# ============================================================
+def main():
+    # ============================================================
+    # MOCK RESEARCH PROVIDER
+    # ============================================================
 
-research_provider = MockResearchProvider(
-    results=[
-        ResearchResult(
-            title="Mock Entity Reference",
-            url="https://example.com/entity",
-            snippet="Mock research evidence.",
-            source="mock",
-            relevance=0.95,
-        )
-    ]
-)
-
-research_engine = AdaptiveResearchEngine(
-    provider=research_provider,
-    client=FakeResearchClient(),
-    max_attempts=4,
-)
-
-
-# ============================================================
-# REAL ENTITY PIPELINE
-# ============================================================
-
-entity_db = EntityDB(
-    path="temp/test_chapter_service_entity_db.json"
-)
-
-entity_pipeline = EntityResearchPipeline(
-    db=entity_db,
-    client=FakeEntityClient(),
-    research_engine=research_engine,
-)
-
-
-# ============================================================
-# CHAPTER SERVICE
-# ============================================================
-
-service = ChapterEntityService(
-    entity_pipeline=entity_pipeline,
-    document_title="Chapter Service Integration Novel",
-    author="Integration Author",
-)
-
-
-# ============================================================
-# CHAPTER DATA
-# ============================================================
-
-paragraphs = [
-    Paragraph(
-        id="p0001",
-        runs=[
-            TextRun(
-                text=(
-                    "Alice enters the Royal Palace "
-                    "with the Silver Sword."
-                )
+    research_provider = MockResearchProvider(
+        results=[
+            ResearchResult(
+                title="Mock Entity Reference",
+                url="https://example.com/entity",
+                snippet="Mock research evidence.",
+                source="mock",
+                relevance=0.95,
             )
-        ],
-    ),
-    Paragraph(
-        id="p0002",
-        runs=[
-            TextRun(
-                text="Marcus waits outside."
-            )
-        ],
-    ),
-]
+        ]
+    )
 
-
-# ============================================================
-# PROCESS CHAPTER
-# ============================================================
-
-print("=== CHAPTER ENTITY SERVICE ===")
-
-result = service.process_chapter(
-    chapter_id="chapter_001",
-    paragraphs=paragraphs,
-)
-
-print(f"Chapter: {result.chapter_id}")
-print(f"Entity count: {len(result.entities)}")
-
-for entity in result.entities:
-    print(
-        entity.text,
-        "|",
-        entity.entity_type,
-        "|",
-        entity.status,
-        "|",
-        entity.source_paragraph_id,
+    research_engine = AdaptiveResearchEngine(
+        provider=research_provider,
+        client=FakeResearchClient(),
+        max_attempts=4,
     )
 
 
-# ============================================================
-# ASSERTIONS
-# ============================================================
+    # ============================================================
+    # REAL ENTITY PIPELINE
+    # ============================================================
 
-assert result.chapter_id == "chapter_001"
+    entity_db = EntityDB(
+        path="temp/test_chapter_service_entity_db.json"
+    )
 
-assert len(result.entities) == 4
-
-entities = {
-    entity.text: entity
-    for entity in result.entities
-}
-
-assert entities["Alice"].entity_type == "character"
-assert entities["Royal Palace"].entity_type == "place"
-assert entities["Silver Sword"].entity_type == "item"
-
-assert entities["Alice"].source_paragraph_id == "p0001"
-assert entities["Royal Palace"].source_paragraph_id == "p0001"
-assert entities["Silver Sword"].source_paragraph_id == "p0001"
-
-assert entities["Alice"].status == "researched"
-assert entities["Royal Palace"].status == "researched"
-assert entities["Silver Sword"].status == "researched"
-
-# Marcus is detected as a candidate but the fake AI classifier
-# intentionally has no mapping for it. The real pipeline therefore
-# preserves it as an uncertain proper noun instead of discarding it.
-assert entities["Marcus"].entity_type == "proper_noun"
-assert entities["Marcus"].status == "uncertain"
-assert entities["Marcus"].source_paragraph_id == "p0002"
+    entity_pipeline = EntityResearchPipeline(
+        db=entity_db,
+        client=FakeEntityClient(),
+        research_engine=research_engine,
+    )
 
 
-# ============================================================
-# VERIFY DATABASE
-# ============================================================
+    # ============================================================
+    # CHAPTER SERVICE
+    # ============================================================
 
-print("\n=== DATABASE ===")
-
-assert entity_db.get("Alice") is not None
-assert entity_db.get("Royal Palace") is not None
-assert entity_db.get("Silver Sword") is not None
-
-print("Alice:", entity_db.get("Alice"))
-print("Royal Palace:", entity_db.get("Royal Palace"))
-print("Silver Sword:", entity_db.get("Silver Sword"))
+    service = ChapterEntityService(
+        entity_pipeline=entity_pipeline,
+        document_title="Chapter Service Integration Novel",
+        author="Integration Author",
+    )
 
 
-# ============================================================
-# FINAL
-# ============================================================
+    # ============================================================
+    # CHAPTER DATA
+    # ============================================================
 
-print("\nPASS")
+    paragraphs = [
+        Paragraph(
+            id="p0001",
+            runs=[
+                TextRun(
+                    text=(
+                        "Alice enters the Royal Palace "
+                        "with the Silver Sword."
+                    )
+                )
+            ],
+        ),
+        Paragraph(
+            id="p0002",
+            runs=[
+                TextRun(
+                    text="Marcus waits outside."
+                )
+            ],
+        ),
+    ]
+
+
+    # ============================================================
+    # PROCESS CHAPTER
+    # ============================================================
+
+    print("=== CHAPTER ENTITY SERVICE ===")
+
+    result = service.process_chapter(
+        chapter_id="chapter_001",
+        paragraphs=paragraphs,
+    )
+
+    print(f"Chapter: {result.chapter_id}")
+    print(f"Entity count: {len(result.entities)}")
+
+    for entity in result.entities:
+        print(
+            entity.text,
+            "|",
+            entity.entity_type,
+            "|",
+            entity.status,
+            "|",
+            entity.source_paragraph_id,
+        )
+
+
+    # ============================================================
+    # ASSERTIONS
+    # ============================================================
+
+    assert result.chapter_id == "chapter_001"
+
+    assert len(result.entities) == 4
+
+    entities = {
+        entity.text: entity
+        for entity in result.entities
+    }
+
+    assert entities["Alice"].entity_type == "character"
+    assert entities["Royal Palace"].entity_type == "place"
+    assert entities["Silver Sword"].entity_type == "item"
+
+    assert entities["Alice"].source_paragraph_id == "p0001"
+    assert entities["Royal Palace"].source_paragraph_id == "p0001"
+    assert entities["Silver Sword"].source_paragraph_id == "p0001"
+
+    assert entities["Alice"].status == "researched"
+    assert entities["Royal Palace"].status == "researched"
+    assert entities["Silver Sword"].status == "researched"
+
+    # Marcus is detected as a candidate but the fake AI classifier
+    # intentionally has no mapping for it. The real pipeline therefore
+    # preserves it as an uncertain proper noun instead of discarding it.
+    assert entities["Marcus"].entity_type == "proper_noun"
+    assert entities["Marcus"].status == "uncertain"
+    assert entities["Marcus"].source_paragraph_id == "p0002"
+
+
+    # ============================================================
+    # VERIFY DATABASE
+    # ============================================================
+
+    print("\n=== DATABASE ===")
+
+    assert entity_db.get("Alice") is not None
+    assert entity_db.get("Royal Palace") is not None
+    assert entity_db.get("Silver Sword") is not None
+
+    print("Alice:", entity_db.get("Alice"))
+    print("Royal Palace:", entity_db.get("Royal Palace"))
+    print("Silver Sword:", entity_db.get("Silver Sword"))
+
+
+    # ============================================================
+    # FINAL
+    # ============================================================
+
+    print("\nPASS")
+
+
+if __name__ == "__main__":
+    main()

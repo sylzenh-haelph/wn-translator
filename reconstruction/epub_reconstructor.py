@@ -536,6 +536,12 @@ def _can_use_xhtml_source(
     if original is None:
         return False
 
+    # XHTML tanpa paragraph document tidak boleh dikirim ke injector.
+    # Contohnya nav.xhtml: file ini dapat memiliki <nav>/<p>, tetapi
+    # elemen tersebut bukan bagian dari paragraph translation.
+    if not paragraphs:
+        return False
+
     expected_ids = _get_paragraph_ids_for_spine(
         document,
         structure,

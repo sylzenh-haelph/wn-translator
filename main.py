@@ -17,7 +17,7 @@ from storage.logger import ProjectLogger
 from storage.progress_db import ProgressDB
 from storage.translation_stats import TranslationStats
 from translation.chapter_reconstructor import ChapterReconstructor
-from models.document import Document
+from models.document import Document, TextRun
 from translation.chapter_splitter import DocumentChapterSplitter
 from translation.chapter_title_translator import ChapterTitleTranslator
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
@@ -343,7 +343,7 @@ def _prune_chapter_epub(
     epub_path: Path,
     chapter_document,
 ):
-    from zipfile import ZIP_DEFLATED, ZipFile
+    from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
     structure = chapter_document.metadata.get("epub", {})
     sources = structure.get("xhtml_sources", {})
@@ -371,12 +371,14 @@ def _prune_chapter_epub(
 
     try:
         with ZipFile(epub_path, "r") as source_zip:
+            infos = source_zip.infolist()
+
             with ZipFile(
                 temp_path,
                 "w",
                 compression=ZIP_DEFLATED,
             ) as output_zip:
-                for info in source_zip.infolist():
+                for info in infos:
                     name = info.filename
                     normalized = name.lstrip("/")
 
@@ -389,10 +391,19 @@ def _prune_chapter_epub(
                     if normalized.lower().endswith(".ncx"):
                         continue
 
-                    output_zip.writestr(
-                        info,
-                        source_zip.read(name),
-                    )
+                    data = source_zip.read(name)
+
+                    if normalized == "mimetype":
+                        output_zip.writestr(
+                            info,
+                            data,
+                            compress_type=ZIP_STORED,
+                        )
+                    else:
+                        output_zip.writestr(
+                            info,
+                            data,
+                        )
 
         temp_path.replace(epub_path)
 
@@ -484,6 +495,62 @@ def export_chapter(
         )
 
 
+def parse_chapter_selection(value: str) -> tuple[int, int]:
+    """Parse --chapter N or --chapter START-END into a 1-based range."""
+    raw = value.strip()
+
+    if not raw:
+        raise ValueError("--chapter tidak boleh kosong.")
+
+    if "-" in raw:
+        parts = raw.split("-")
+
+        if len(parts) != 2:
+            raise ValueError(
+                "Format --chapter harus N atau START-END."
+            )
+
+        start_raw, end_raw = (
+            part.strip()
+            for part in parts
+        )
+
+        if not start_raw.isdigit() or not end_raw.isdigit():
+            raise ValueError(
+                "Nomor chapter harus berupa bilangan bulat positif."
+            )
+
+        start = int(start_raw)
+        end = int(end_raw)
+
+        if start <= 0 or end <= 0:
+            raise ValueError(
+                "Nomor chapter harus lebih besar dari 0."
+            )
+
+        if start > end:
+            raise ValueError(
+                "Range chapter tidak valid: awal tidak boleh "
+                "lebih besar dari akhir."
+            )
+
+        return start, end
+
+    if not raw.isdigit():
+        raise ValueError(
+            "Format --chapter harus N atau START-END."
+        )
+
+    number = int(raw)
+
+    if number <= 0:
+        raise ValueError(
+            "Nomor chapter harus lebih besar dari 0."
+        )
+
+    return number, number
+
+
 def process_chapters(
     document,
     processor,
@@ -494,9 +561,32 @@ def process_chapters(
     chapter_output_dir: Path | None = None,
     output_suffix: str = ".epub",
     input_path: Path | None = None,
+    chapter_selection: tuple[int, int] | None = None,
 ):
     splitter = DocumentChapterSplitter()
     chapters = splitter.split(document)
+
+    if chapter_selection is None:
+        selected_start = 1
+        selected_end = len(chapters)
+    else:
+        selected_start, selected_end = chapter_selection
+
+        if selected_start > len(chapters):
+            raise ValueError(
+                f"Chapter {selected_start} tidak tersedia. "
+                f"Total chapter: {len(chapters)}."
+            )
+
+        if selected_end > len(chapters):
+            raise ValueError(
+                f"Chapter {selected_end} tidak tersedia. "
+                f"Total chapter: {len(chapters)}."
+            )
+
+    selected_indexes = set(
+        range(selected_start - 1, selected_end)
+    )
 
     assembler = ChapterTranslationAssembler()
     reconstructor = ChapterReconstructor()
@@ -520,6 +610,15 @@ def process_chapters(
         start=1,
     ):
         print()
+        if (index - 1) not in selected_indexes:
+            if logger:
+                logger.info(
+                    f"Chapter skipped by selection: "
+                    f"{chapter.chapter_id} | "
+                    f"{chapter.title}"
+                )
+            continue
+
         print(
             f"[{index}/{len(chapters)}] "
             f"Chapter: {chapter.title}"
@@ -735,6 +834,31 @@ def process_chapters(
                     f"attempts={processed.attempts}"
                 )
 
+        chapter_passed = bool(result) and all(
+            processed.qa_passed
+            for processed in result
+        )
+
+        stats.add_chapter(
+            chapter_id=chapter.chapter_id,
+            title=bilingual_title,
+            paragraphs=len(chapter.paragraphs),
+            processed_chunks=result,
+            entities=resolved_entities,
+        )
+
+        if not chapter_passed:
+            print(
+                "  QA        : FAILED - "
+                "chapter dipertahankan dalam bentuk asli"
+            )
+            if logger:
+                logger.warning(
+                    f"Chapter translation failed QA: "
+                    f"{chapter.chapter_id}"
+                )
+            continue
+
         assembled = assembler.assemble(
             chunks=chunks,
             processed_chunks=result,
@@ -767,13 +891,6 @@ def process_chapters(
             reconstructed_chapter
         )
 
-        stats.add_chapter(
-            chapter_id=chapter.chapter_id,
-            title=bilingual_title,
-            paragraphs=len(chapter.paragraphs),
-            processed_chunks=result,
-            entities=resolved_entities,
-        )
         stats.mark_completed_chapter()
 
         if (
@@ -798,7 +915,34 @@ def process_chapters(
             )
 
     stats.finish(time.monotonic() - translation_started)
-    return translated_chapters, stats
+
+    # DocumentAssembler expects the complete chapter sequence.
+    # Selected chapters use their translated reconstruction;
+    # unselected chapters remain in their original source form.
+    translated_by_index = {}
+
+    for chapter in translated_chapters:
+        for original_index, original_chapter in enumerate(
+            chapters,
+            start=1,
+        ):
+            if original_chapter.chapter_id == chapter.chapter_id:
+                translated_by_index[original_index - 1] = chapter
+                break
+
+    complete_chapters = []
+
+    for chapter_index, original_chapter in enumerate(chapters):
+        translated_chapter = translated_by_index.get(
+            chapter_index
+        )
+
+        if translated_chapter is not None:
+            complete_chapters.append(translated_chapter)
+        else:
+            complete_chapters.append(original_chapter)
+
+    return complete_chapters, stats
 
 
 def show_status(input_path: Path, project_dir: Path):
@@ -902,6 +1046,12 @@ def build_parser():
         "--export-chapters",
         action="store_true",
         help="Export setiap chapter segera setelah selesai diterjemahkan",
+    )
+
+    parser.add_argument(
+        "--chapter",
+        default=None,
+        help="Terjemahkan chapter tertentu (N) atau range (START-END)",
     )
 
     parser.add_argument(
@@ -1223,6 +1373,25 @@ def main():
                 f"{chapter_output_dir}"
             )
 
+        chapter_selection = None
+
+        if args.chapter is not None:
+            chapter_selection = parse_chapter_selection(
+                args.chapter
+            )
+
+            print(
+                f"Chapter selection: "
+                f"{chapter_selection[0]}-"
+                f"{chapter_selection[1]}"
+            )
+
+            logger.info(
+                f"Chapter selection: "
+                f"{chapter_selection[0]}-"
+                f"{chapter_selection[1]}"
+            )
+
         translated_chapters, translation_stats = process_chapters(
             document,
             processor,
@@ -1233,6 +1402,7 @@ def main():
             chapter_output_dir=chapter_output_dir,
             output_suffix=output_path.suffix.lower(),
             input_path=input_path,
+            chapter_selection=chapter_selection,
         )
 
         stats_path = project_dir / "stats" / "translation_stats.json"
