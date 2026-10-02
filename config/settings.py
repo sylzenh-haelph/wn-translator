@@ -26,6 +26,9 @@ class AppConfig:
 
     # Research
     research_enabled: bool = True
+    research_timeout: int = 20
+    research_max_retries: int = 1
+    research_max_attempts: int = 4
 
     # QA
     qa_enabled: bool = True
@@ -76,6 +79,21 @@ class AppConfig:
                 "output_format harus 'epub' atau 'docx'."
             )
 
+        if self.research_timeout <= 0:
+            raise ValueError(
+                "research_timeout harus lebih besar dari 0."
+            )
+
+        if self.research_max_retries < 0:
+            raise ValueError(
+                "research_max_retries tidak boleh negatif."
+            )
+
+        if self.research_max_attempts <= 0:
+            raise ValueError(
+                "research_max_attempts harus lebih besar dari 0."
+            )
+
         if self.qa_max_retries < 0:
             raise ValueError(
                 "qa_max_retries tidak boleh negatif."
@@ -111,6 +129,9 @@ _CONFIG_FIELDS = {
     "output_format": str,
     "backup_retention": int,
     "research_enabled": bool,
+    "research_timeout": int,
+    "research_max_retries": int,
+    "research_max_attempts": int,
     "qa_enabled": bool,
     "qa_max_retries": int,
 }

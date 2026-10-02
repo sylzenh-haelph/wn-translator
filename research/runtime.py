@@ -15,6 +15,7 @@ def build_research_service(
     document_title="",
     author="",
     research_timeout=20,
+    research_max_retries=1,
     max_attempts=4,
 ):
     """
@@ -40,7 +41,8 @@ def build_research_service(
     )
 
     provider = DuckDuckGoResearchProvider(
-        timeout=research_timeout
+        timeout=research_timeout,
+        max_retries=research_max_retries,
     )
 
     research_engine = AdaptiveResearchEngine(

@@ -1413,8 +1413,8 @@ def main():
             research_client = GeminiClient(
                 model=config.model,
                 api_key=config.gemini_api_key,
-                max_retries=config.max_retries,
-                timeout=config.timeout,
+                max_retries=config.research_max_retries,
+                timeout=config.research_timeout,
                 backoff_base=config.backoff_base,
             )
 
@@ -1423,7 +1423,9 @@ def main():
                 client=research_client,
                 document_title=document.title,
                 author=document.author,
-                research_timeout=config.timeout,
+                research_timeout=config.research_timeout,
+                research_max_retries=config.research_max_retries,
+                max_attempts=config.research_max_attempts,
             )
 
             logger.info(
