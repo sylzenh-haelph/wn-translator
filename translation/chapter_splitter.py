@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 
 from models.document import Document, Paragraph
+from translation.epub_spine_classifier import (
+    classify_spine_document,
+)
 
 
 @dataclass
@@ -39,6 +42,9 @@ class DocumentChapterSplitter:
         "isi",
         "daftar kandungan",
     }
+
+    def __init__(self, ai_classifier=None):
+        self.ai_classifier = ai_classifier
 
     def split(
         self,
@@ -121,7 +127,15 @@ class DocumentChapterSplitter:
 
         chapters: list[DocumentChapter] = []
 
+        navigation_items = structure.get(
+            "navigation_items",
+            {},
+        )
+
         for idref in spine:
+            if idref in navigation_items:
+                continue
+
             source_paragraphs = (
                 paragraphs_by_spine.get(
                     idref,
@@ -134,6 +148,27 @@ class DocumentChapterSplitter:
 
             heading = None
             title = ""
+
+            # Classify each EPUB spine document. Deterministic
+            # classification is authoritative when evidence is strong.
+            classification = classify_spine_document(
+                source_paragraphs
+            )
+
+            if (
+                classification.classification == "ambiguous"
+                and self.ai_classifier is not None
+            ):
+                classification = self.ai_classifier(
+                    source_paragraphs,
+                    idref,
+                    document,
+                )
+
+            # Front/title-matter spine documents are not
+            # translation chapters.
+            if classification.classification == "front_matter":
+                continue
 
             # The first heading in the spine
             # document is treated as its title.

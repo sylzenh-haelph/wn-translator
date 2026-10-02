@@ -20,6 +20,7 @@ from translation.chapter_reconstructor import ChapterReconstructor
 from models.document import Document, TextRun
 from translation.chapter_splitter import DocumentChapterSplitter
 from translation.chapter_title_translator import ChapterTitleTranslator
+from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
@@ -642,7 +643,23 @@ def process_chapters(
     input_path: Path | None = None,
     chapter_selection: tuple[int, int] | None = None,
 ):
+    ai_client = processor.translation_engine.client
+
+    def ai_spine_classifier(
+        paragraphs,
+        document_id,
+        source_document,
+    ):
+        return classify_spine_document_with_ai(
+            client=ai_client,
+            paragraphs=paragraphs,
+            document_id=document_id,
+            novel_title=source_document.title,
+            author=source_document.author,
+        )
+
     splitter = DocumentChapterSplitter()
+    splitter.ai_classifier = ai_spine_classifier
     chapters = splitter.split(document)
 
     if chapter_selection is None:
