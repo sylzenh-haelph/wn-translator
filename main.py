@@ -106,6 +106,85 @@ def create_safe_output_path(output_path: Path):
     )
 
 
+def backup_existing_output(
+    output_path: Path,
+    retention: int = 5,
+    logger: ProjectLogger | None = None,
+):
+    if not output_path.exists():
+        return None
+
+    if not output_path.is_file():
+        raise RuntimeError(
+            f"Output lama bukan file: {output_path}"
+        )
+
+    backup_dir = output_path.parent / ".wn-translator-backups"
+    backup_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    timestamp = time.strftime(
+        "%Y%m%d-%H%M%S"
+    )
+    timestamp_ns = time.time_ns() % 1_000_000_000
+
+    backup_path = (
+        backup_dir
+        / (
+            f"{output_path.stem}.{timestamp}-"
+            f"{timestamp_ns:09d}{output_path.suffix}"
+        )
+    )
+
+    counter = 1
+    while backup_path.exists():
+        backup_path = (
+            backup_dir
+            / f"{output_path.stem}.{timestamp}-{counter}"
+            f"{output_path.suffix}"
+        )
+        counter += 1
+
+    shutil.copy2(
+        output_path,
+        backup_path,
+    )
+
+    backups = sorted(
+        (
+            path
+            for path in backup_dir.iterdir()
+            if path.is_file()
+            and path.name.startswith(
+                f"{output_path.stem}."
+            )
+            and path.suffix == output_path.suffix
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+    if retention == 0:
+        for old_backup in backups:
+            old_backup.unlink()
+    elif len(backups) > retention:
+        for old_backup in backups[retention:]:
+            old_backup.unlink()
+
+    message = (
+        f"Backup output lama: {backup_path}"
+    )
+
+    print(f"  {message}")
+
+    if logger:
+        logger.info(message)
+
+    return backup_path
+
+
 def validate_output(
     output_path: Path,
     logger: ProjectLogger | None = None,
@@ -1507,6 +1586,12 @@ def main():
             output_path.parent.mkdir(
                 parents=True,
                 exist_ok=True,
+            )
+
+            backup_existing_output(
+                output_path,
+                retention=config.backup_retention,
+                logger=logger,
             )
 
             shutil.move(

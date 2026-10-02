@@ -22,6 +22,7 @@ class AppConfig:
     progress_dir: str = "progress"
     cache_dir: str = "cache"
     output_format: str = "epub"
+    backup_retention: int = 5
 
     # Research
     research_enabled: bool = True
@@ -80,6 +81,11 @@ class AppConfig:
                 "qa_max_retries tidak boleh negatif."
             )
 
+        if self.backup_retention < 0:
+            raise ValueError(
+                "backup_retention tidak boleh negatif."
+            )
+
         if not self.progress_dir.strip():
             raise ValueError(
                 "progress_dir tidak boleh kosong."
@@ -103,6 +109,7 @@ _CONFIG_FIELDS = {
     "progress_dir": str,
     "cache_dir": str,
     "output_format": str,
+    "backup_retention": int,
     "research_enabled": bool,
     "qa_enabled": bool,
     "qa_max_retries": int,
