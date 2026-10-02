@@ -1,5 +1,5 @@
 from research.entity_types import EntityCandidate
-from research.ai_entity_extractor import extract_entities_with_ai
+from research.ai_entity_extractor import extract_entities_batch_with_ai
 
 
 def ai_entities_to_candidates(
@@ -9,19 +9,14 @@ def ai_entities_to_candidates(
     author="",
 ):
     """
-    Extract entities from paragraphs using Gemini and convert
-    them into the existing EntityCandidate representation.
+    Extract entities from a paragraph collection using one Gemini request
+    and convert them into the existing EntityCandidate representation.
 
-    Each paragraph is sent independently so every entity keeps
-    an exact source_paragraph_id.
-
-    This is intentionally an adapter layer. The existing
-    research pipeline can continue consuming EntityCandidate
-    while the extraction implementation changes from regex
-    to AI.
+    The batch extractor preserves the exact source_paragraph_id returned
+    by the model, so entity research can still trace each candidate back
+    to its source paragraph.
     """
-    candidates = []
-    seen = set()
+    normalized_paragraphs = []
 
     for paragraph in paragraphs:
         text = paragraph.text
@@ -29,31 +24,41 @@ def ai_entities_to_candidates(
         if not text.strip():
             continue
 
-        result = extract_entities_with_ai(
-            client=client,
-            text=text,
-            novel_title=novel_title,
-            author=author,
+        normalized_paragraphs.append(
+            (paragraph.id, text)
         )
 
-        for entity in result.entities:
-            key = entity.text.casefold()
+    if not normalized_paragraphs:
+        return []
 
-            if key in seen:
-                continue
+    result = extract_entities_batch_with_ai(
+        client=client,
+        paragraphs=normalized_paragraphs,
+        novel_title=novel_title,
+        author=author,
+    )
 
-            seen.add(key)
+    candidates = []
+    seen = set()
 
-            candidates.append(
-                EntityCandidate(
-                    text=entity.text,
-                    entity_type=entity.entity_type,
-                    source_paragraph_id=paragraph.id,
-                    reason=(
-                        "ai_extraction: "
-                        + entity.reason
-                    ),
-                )
+    for entity in result.entities:
+        key = entity.text.casefold()
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        candidates.append(
+            EntityCandidate(
+                text=entity.text,
+                entity_type=entity.entity_type,
+                source_paragraph_id=entity.source_paragraph_id,
+                reason=(
+                    "ai_extraction: "
+                    + entity.reason
+                ),
             )
+        )
 
     return candidates
