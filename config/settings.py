@@ -9,7 +9,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class AppConfig:
-    # Gemini
+    # AI provider / model
+    provider: str = "gemini"
     model: str = "gemini-3.5-flash-lite"
     max_retries: int = 3
     timeout: int = 120
@@ -35,6 +36,25 @@ class AppConfig:
     qa_max_retries: int = 2
 
     @property
+    def openrouter_api_key(self) -> str:
+        key=os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY belum tersedia di environment."
+            )
+        return key
+
+    @property
+    def api_key(self) -> str:
+        if self.provider=="gemini":
+            return self.gemini_api_key
+        if self.provider=="openrouter":
+            return self.openrouter_api_key
+        raise ValueError(
+            f"Provider AI tidak didukung: {self.provider!r}"
+        )
+
+    @property
     def gemini_api_key(self) -> str:
         key = os.environ.get("GEMINI_API_KEY")
 
@@ -46,6 +66,11 @@ class AppConfig:
         return key
 
     def validate(self) -> None:
+        if self.provider not in {"gemini", "openrouter"}:
+            raise ValueError(
+                "provider harus 'gemini' atau 'openrouter'."
+            )
+
         if not self.model.strip():
             raise ValueError(
                 "model tidak boleh kosong."
@@ -119,6 +144,7 @@ class AppConfig:
 
 
 _CONFIG_FIELDS = {
+    "provider": str,
     "model": str,
     "max_retries": int,
     "timeout": int,

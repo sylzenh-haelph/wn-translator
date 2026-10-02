@@ -8,7 +8,7 @@ from qa.rule_based_qa import run_qa
 from storage.progress_db import ProgressDB
 from storage.translation_cache import TranslationCache
 from translation.chapter_processor import ChapterProcessor
-from translation.model_client import GeminiClient
+from translation.model_client import create_model_client
 from translation.translation_engine import TranslationEngine
 
 
@@ -32,9 +32,10 @@ def build_chapter_processor(
         exist_ok=True,
     )
 
-    client = GeminiClient(
+    client = create_model_client(
+        provider=config.provider,
         model=config.model,
-        api_key=config.gemini_api_key,
+        api_key=config.api_key,
         max_retries=config.max_retries,
         timeout=config.timeout,
         backoff_base=config.backoff_base,

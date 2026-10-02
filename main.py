@@ -1352,7 +1352,8 @@ def main():
         )
 
         logger.info(
-            f"Config: model={config.model!r} | "
+            f"Config: provider={config.provider!r} | "
+                f"model={config.model!r} | "
             f"max_retries={config.max_retries} | "
             f"timeout={config.timeout} | "
             f"backoff_base={config.backoff_base} | "
@@ -1425,11 +1426,12 @@ def main():
             # Research menggunakan Gemini client terpisah
             # tetapi konfigurasi model/API sama dengan
             # translation runtime.
-            from translation.model_client import GeminiClient
+            from translation.model_client import create_model_client
 
-            research_client = GeminiClient(
+            research_client = create_model_client(
+                provider=config.provider,
                 model=config.model,
-                api_key=config.gemini_api_key,
+                api_key=config.api_key,
                 max_retries=config.research_max_retries,
                 timeout=config.research_timeout,
                 backoff_base=config.backoff_base,
