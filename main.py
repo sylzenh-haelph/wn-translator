@@ -1352,8 +1352,10 @@ def main():
         )
 
         logger.info(
-            f"Config: provider={config.provider!r} | "
-                f"model={config.model!r} | "
+            f"Config: translation={config.translation_provider!r}/"
+            f"{config.translation_model!r} | "
+            f"research={config.research_provider!r}/"
+            f"{config.research_model!r} | "
             f"max_retries={config.max_retries} | "
             f"timeout={config.timeout} | "
             f"backoff_base={config.backoff_base} | "
@@ -1423,15 +1425,14 @@ def main():
                 "Entity research initialization started"
             )
 
-            # Research menggunakan Gemini client terpisah
-            # tetapi konfigurasi model/API sama dengan
-            # translation runtime.
+            # Research menggunakan model role khusus
+            # yang terpisah dari translation runtime.
             from translation.model_client import create_model_client
 
             research_client = create_model_client(
-                provider=config.provider,
-                model=config.model,
-                api_key=config.api_key,
+                provider=config.research_provider,
+                model=config.research_model,
+                api_key=config.get_api_key(config.research_provider),
                 max_retries=config.research_max_retries,
                 timeout=config.research_timeout,
                 backoff_base=config.backoff_base,

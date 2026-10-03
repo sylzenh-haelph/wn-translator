@@ -9,6 +9,7 @@ from storage.progress_db import ProgressDB
 from storage.translation_cache import TranslationCache
 from translation.chapter_processor import ChapterProcessor
 from translation.model_client import create_model_client
+from translation.refinement_engine import RefinementEngine
 from translation.translation_engine import TranslationEngine
 
 
@@ -33,9 +34,9 @@ def build_chapter_processor(
     )
 
     client = create_model_client(
-        provider=config.provider,
-        model=config.model,
-        api_key=config.api_key,
+        provider=config.translation_provider,
+        model=config.translation_model,
+        api_key=config.get_api_key(config.translation_provider),
         max_retries=config.max_retries,
         timeout=config.timeout,
         backoff_base=config.backoff_base,
@@ -43,6 +44,19 @@ def build_chapter_processor(
 
     translation_engine = TranslationEngine(
         client=client,
+    )
+
+    refinement_client = create_model_client(
+        provider=config.refinement_provider,
+        model=config.refinement_model,
+        api_key=config.get_api_key(config.refinement_provider),
+        max_retries=config.max_retries,
+        timeout=config.timeout,
+        backoff_base=config.backoff_base,
+    )
+
+    refinement_engine = RefinementEngine(
+        client=refinement_client,
     )
 
     cache = TranslationCache(
@@ -55,10 +69,11 @@ def build_chapter_processor(
 
     retry_controller = RetryController(
         translation_engine=translation_engine,
+        refinement_engine=refinement_engine,
         qa_function=run_qa,
         max_retries=config.qa_max_retries,
         cache=cache,
-        cache_model=config.model,
+        cache_model=config.translation_model,
     )
 
     return ChapterProcessor(

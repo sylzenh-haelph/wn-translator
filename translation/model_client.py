@@ -11,7 +11,7 @@ class GeminiClient:
 
     def __init__(
         self,
-        model="gemini-3.5-flash-lite",
+        model="gemini-3.1-flash-lite",
         api_key=None,
         max_retries=3,
         timeout=120,

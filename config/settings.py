@@ -11,7 +11,17 @@ from typing import Any
 class AppConfig:
     # AI provider / model
     provider: str = "gemini"
-    model: str = "gemini-3.5-flash-lite"
+    model: str = "gemini-3.1-flash-lite"
+
+    # AI workload roles
+    translation_provider: str = "openrouter"
+    translation_model: str = "tencent/hy-mt2-30b-a3b"
+    research_provider: str = "openrouter"
+    research_model: str = "qwen/qwen3.5-35b-a3b"
+    refinement_provider: str = "gemini"
+    refinement_model: str = "gemma-4-31b-it"
+    orchestration_provider: str = "gemini"
+    orchestration_model: str = "gemini-3.1-flash-lite"
     max_retries: int = 3
     timeout: int = 120
     backoff_base: float = 2.0
@@ -44,15 +54,18 @@ class AppConfig:
             )
         return key
 
-    @property
-    def api_key(self) -> str:
-        if self.provider=="gemini":
+    def get_api_key(self, provider: str) -> str:
+        if provider == "gemini":
             return self.gemini_api_key
-        if self.provider=="openrouter":
+        if provider == "openrouter":
             return self.openrouter_api_key
         raise ValueError(
-            f"Provider AI tidak didukung: {self.provider!r}"
+            f"Provider AI tidak didukung: {provider!r}"
         )
+
+    @property
+    def api_key(self) -> str:
+        return self.get_api_key(self.provider)
 
     @property
     def gemini_api_key(self) -> str:
@@ -75,6 +88,23 @@ class AppConfig:
             raise ValueError(
                 "model tidak boleh kosong."
             )
+
+        role_configs = (
+            ("translation", self.translation_provider, self.translation_model),
+            ("research", self.research_provider, self.research_model),
+            ("refinement", self.refinement_provider, self.refinement_model),
+            ("orchestration", self.orchestration_provider, self.orchestration_model),
+        )
+
+        for role, provider, model in role_configs:
+            if provider not in {"gemini", "openrouter"}:
+                raise ValueError(
+                    f"{role}_provider harus 'gemini' atau 'openrouter'."
+                )
+            if not model.strip():
+                raise ValueError(
+                    f"{role}_model tidak boleh kosong."
+                )
 
         if self.max_retries < 0:
             raise ValueError(
@@ -146,6 +176,14 @@ class AppConfig:
 _CONFIG_FIELDS = {
     "provider": str,
     "model": str,
+    "translation_provider": str,
+    "translation_model": str,
+    "research_provider": str,
+    "research_model": str,
+    "refinement_provider": str,
+    "refinement_model": str,
+    "orchestration_provider": str,
+    "orchestration_model": str,
     "max_retries": int,
     "timeout": int,
     "backoff_base": float,

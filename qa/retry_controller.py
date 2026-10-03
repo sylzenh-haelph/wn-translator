@@ -44,6 +44,7 @@ class RetryController:
         max_retries: int = 2,
         cache: TranslationCache | None = None,
         cache_model: str = "",
+        refinement_engine=None,
     ):
         if max_retries < 0:
             raise ValueError(
@@ -51,6 +52,7 @@ class RetryController:
             )
 
         self.translation_engine = translation_engine
+        self.refinement_engine = refinement_engine
         self.qa_function = qa_function
         self.max_retries = max_retries
         self.cache = cache
@@ -244,17 +246,37 @@ class RetryController:
         attempts = []
         history = []
 
+        previous_translation = None
+        previous_paragraph_translations = []
+        previous_qa_issues = []
+
         for attempt_number in range(
             1,
             self.max_retries + 2,
         ):
-            result = self.translation_engine.translate(
-                text=chunk.text,
-                paragraph_texts=chunk.paragraph_texts,
-                chapter_context=chapter_context,
-                context_state=context_state,
-                entity_resolutions=entity_resolutions,
-            )
+            if (
+                attempt_number == 1
+                or self.refinement_engine is None
+            ):
+                result = self.translation_engine.translate(
+                    text=chunk.text,
+                    paragraph_texts=chunk.paragraph_texts,
+                    chapter_context=chapter_context,
+                    context_state=context_state,
+                    entity_resolutions=entity_resolutions,
+                )
+            else:
+                result = self.refinement_engine.refine(
+                    text=chunk.text,
+                    translation=previous_translation,
+                    paragraph_translations=(
+                        previous_paragraph_translations
+                    ),
+                    chapter_context=chapter_context,
+                    context_state=context_state,
+                    entity_resolutions=entity_resolutions,
+                    qa_issues=previous_qa_issues,
+                )
 
             translation = result.translation
 
@@ -332,6 +354,13 @@ class RetryController:
                     paragraph_translations=paragraph_translations,
                 )
 
+            previous_translation = translation
+            previous_paragraph_translations = (
+                paragraph_translations
+            )
+            previous_qa_issues = list(
+                qa_result.issues
+            )
             context_state = new_context_state
 
         final_attempt = attempts[-1]
