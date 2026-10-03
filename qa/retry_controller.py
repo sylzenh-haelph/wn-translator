@@ -249,34 +249,43 @@ class RetryController:
         previous_translation = None
         previous_paragraph_translations = []
         previous_qa_issues = []
+        retry_stage = "translation"
 
         for attempt_number in range(
             1,
             self.max_retries + 2,
         ):
-            if (
-                attempt_number == 1
+            use_translation_engine = (
+                retry_stage == "translation"
                 or self.refinement_engine is None
-            ):
-                result = self.translation_engine.translate(
-                    text=chunk.text,
-                    paragraph_texts=chunk.paragraph_texts,
-                    chapter_context=chapter_context,
-                    context_state=context_state,
-                    entity_resolutions=entity_resolutions,
-                )
-            else:
-                result = self.refinement_engine.refine(
-                    text=chunk.text,
-                    translation=previous_translation,
-                    paragraph_translations=(
-                        previous_paragraph_translations
-                    ),
-                    chapter_context=chapter_context,
-                    context_state=context_state,
-                    entity_resolutions=entity_resolutions,
-                    qa_issues=previous_qa_issues,
-                )
+            )
+
+            try:
+                if use_translation_engine:
+                    result = self.translation_engine.translate(
+                        text=chunk.text,
+                        paragraph_texts=chunk.paragraph_texts,
+                        chapter_context=chapter_context,
+                        context_state=context_state,
+                        entity_resolutions=entity_resolutions,
+                    )
+                else:
+                    result = self.refinement_engine.refine(
+                        text=chunk.text,
+                        translation=previous_translation,
+                        paragraph_translations=(
+                            previous_paragraph_translations
+                        ),
+                        chapter_context=chapter_context,
+                        context_state=context_state,
+                        entity_resolutions=entity_resolutions,
+                        qa_issues=previous_qa_issues,
+                    )
+            except ValueError:
+                if attempt_number >= self.max_retries + 1:
+                    raise
+
+                continue
 
             translation = result.translation
 
@@ -362,6 +371,7 @@ class RetryController:
                 qa_result.issues
             )
             context_state = new_context_state
+            retry_stage = "refinement"
 
         final_attempt = attempts[-1]
 

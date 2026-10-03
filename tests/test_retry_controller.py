@@ -186,3 +186,75 @@ def test_retry_does_not_use_refinement_when_initial_translation_passes():
     assert len(translation_engine.calls) == 1
     assert len(refinement_engine.calls) == 0
     assert len(result.attempts) == 1
+
+class FakeFlakyTranslationEngine:
+    def __init__(self):
+        self.calls = []
+
+    def translate(self, **kwargs):
+        self.calls.append(kwargs)
+
+        if len(self.calls) == 1:
+            raise ValueError(
+                "Jumlah paragraph_translations tidak sesuai: 1 != 2"
+            )
+
+        return SimpleNamespace(
+            translation="Terjemahan valid.",
+            paragraph_translations=[
+                "Terjemahan pertama.",
+                "Terjemahan kedua.",
+            ],
+            context_state=ContextState(
+                scene="scene-after-retry",
+            ),
+        )
+
+
+class TwoParagraphChunk:
+    text = "First paragraph.\\nSecond paragraph."
+    paragraph_texts = [
+        "First paragraph.",
+        "Second paragraph.",
+    ]
+
+
+def test_retry_repeats_translation_when_output_contract_fails():
+    translation_engine = FakeFlakyTranslationEngine()
+    qa_calls = []
+
+    def passing_qa(
+        source_text,
+        translation,
+        preserved_entities=None,
+    ):
+        qa_calls.append(translation)
+        return QAResult(
+            passed=True,
+            issues=[],
+        )
+
+    controller = RetryController(
+        translation_engine=translation_engine,
+        qa_function=passing_qa,
+        max_retries=1,
+    )
+
+    result = controller.translate_with_retry(
+        chunk=TwoParagraphChunk(),
+        chapter_context={},
+        context_state=ContextState(),
+        entity_resolutions=[],
+    )
+
+    assert result.passed is True
+    assert result.flagged is False
+    assert result.translation == "Terjemahan valid."
+    assert result.paragraph_translations == [
+        "Terjemahan pertama.",
+        "Terjemahan kedua.",
+    ]
+
+    assert len(translation_engine.calls) == 2
+    assert len(qa_calls) == 1
+    assert len(result.attempts) == 1
