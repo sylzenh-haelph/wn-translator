@@ -1,3 +1,3 @@
 // entire file content with no omissions
-// no "..." or "... rest of code..." comments
+// no "..." or comments indicating skipped sections
 // complete file from start to end
