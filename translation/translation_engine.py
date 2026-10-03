@@ -37,11 +37,38 @@ IMMUTABLE PARAGRAPH RULE:
 1 source paragraph MUST produce exactly 1 translated paragraph.
 Never merge, split, reorder, omit, or invent paragraphs.
 
-For every input paragraph, return exactly one item in
-paragraph_translations in the same order.
+The source chunk will contain explicit paragraph markers such as
+[PARAGRAPH 1], [PARAGRAPH 2], and so on.
+
+The paragraph_translations array MUST contain exactly the same
+number of items as the number of source paragraphs.
+
+Each array item represents ONE source paragraph and ONE translated
+paragraph:
+- one source paragraph -> one array item
+- preserve the exact source paragraph order
+- each array item MUST contain only that paragraph's translation
+- NEVER put a newline character inside a paragraph_translations item
+- NEVER combine two source paragraphs into one array item
+- NEVER split one source paragraph into multiple array items
+
+For example, if the source has:
+[PARAGRAPH 1]
+Alice entered the room.
+
+[PARAGRAPH 2]
+Marcus followed her quietly.
+
+then paragraph_translations MUST have exactly two items:
+[
+  "Alice memasuki ruangan.",
+  "Marcus mengikutinya dengan diam-diam."
+]
 
 The field translation must contain the complete translated chunk,
 with paragraph boundaries represented by newline characters.
+The newline-separated translation in translation does NOT replace
+the required individual items in paragraph_translations.
 
 Return ONLY valid JSON with this structure:
 {
