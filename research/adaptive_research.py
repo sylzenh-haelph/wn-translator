@@ -58,6 +58,9 @@ class AdaptiveResearchEngine:
                 attempt=attempt,
             )
 
+            if query == last_query:
+                continue
+
             last_query = query
 
             results = self.provider.search(

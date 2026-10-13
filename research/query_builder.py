@@ -42,15 +42,12 @@ def build_adaptive_query(
     Membuat query berdasarkan tingkat kebutuhan konteks.
 
     attempt 1:
-        entity + type
+        entity + type + novel title (jika ada)
 
     attempt 2:
-        + novel title
-
-    attempt 3:
         + author
 
-    attempt 4+:
+    attempt 3+:
         + chapter context
     """
 
@@ -59,13 +56,13 @@ def build_adaptive_query(
         entity_type,
     )
 
-    if attempt >= 2 and novel_title:
+    if novel_title:
         query += f' "{novel_title}"'
 
-    if attempt >= 3 and author:
+    if attempt >= 2 and author:
         query += f' "{author}"'
 
-    if attempt >= 4 and chapter_context:
+    if attempt >= 3 and chapter_context:
         # Batasi context agar query tidak menjadi terlalu panjang.
         context = " ".join(
             chapter_context.split()
