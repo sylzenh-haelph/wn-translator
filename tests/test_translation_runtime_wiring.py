@@ -47,10 +47,12 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
             max_retries,
             cache,
             cache_model,
+            cache_guard=None,
         ):
             self.translation_engine = translation_engine
             self.refinement_engine = refinement_engine
             self.cache_model = cache_model
+            self.cache_guard = cache_guard
 
     class FakeProgressDB:
         def __init__(self, progress_dir):
@@ -118,6 +120,7 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
         refinement_model="refinement-model",
         orchestration_provider="gemini",
         orchestration_model="orchestration-model",
+        translation_fallbacks="",
     )
 
     processor = runtime.build_chapter_processor(
@@ -140,11 +143,15 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
         processor.retry_controller.refinement_engine.client
         is refinement_client
     )
-    assert (
+    translation_engine_client = (
         processor.retry_controller.translation_engine.client
-        is translation_client
     )
+    assert translation_engine_client.clients == [translation_client]
+    assert translation_engine_client.labels == [
+        "openrouter:translation-model",
+    ]
     assert (
         processor.retry_controller.cache_model
         == "translation-model"
     )
+    assert callable(processor.retry_controller.cache_guard)

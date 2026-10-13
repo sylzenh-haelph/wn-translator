@@ -40,7 +40,7 @@ class FailoverModelClient:
 
             try:
                 text = client.generate(prompt)
-            except RuntimeError as exc:
+            except (RuntimeError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
 
                 if self.on_failover and index + 1 < len(self.clients):

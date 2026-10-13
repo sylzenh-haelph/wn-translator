@@ -22,6 +22,7 @@ class AppConfig:
     refinement_model: str = "gemma-4-31b-it"
     orchestration_provider: str = "gemini"
     orchestration_model: str = "gemini-3.1-flash-lite"
+    translation_fallbacks: str = "gemini:gemma-4-31b-it,gemini:gemini-3.1-flash-lite"
     max_retries: int = 3
     timeout: int = 120
     backoff_base: float = 2.0
@@ -106,6 +107,8 @@ class AppConfig:
                     f"{role}_model tidak boleh kosong."
                 )
 
+        parse_model_chain(self.translation_fallbacks)
+
         if self.max_retries < 0:
             raise ValueError(
                 "max_retries tidak boleh negatif."
@@ -184,6 +187,7 @@ _CONFIG_FIELDS = {
     "refinement_model": str,
     "orchestration_provider": str,
     "orchestration_model": str,
+    "translation_fallbacks": str,
     "max_retries": int,
     "timeout": int,
     "backoff_base": float,
@@ -367,3 +371,41 @@ def load_config(
     config.validate()
 
     return config
+
+
+def parse_model_chain(value: str) -> list[tuple[str, str]]:
+    """
+    Format: "provider:model,provider:model".
+    String kosong berarti tanpa cadangan.
+    """
+    chain: list[tuple[str, str]] = []
+
+    for raw in value.split(","):
+        item = raw.strip()
+
+        if not item:
+            continue
+
+        if ":" not in item:
+            raise ValueError(
+                "Format cadangan harus 'provider:model', "
+                f"dapat: {item!r}"
+            )
+
+        provider, model = (
+            part.strip() for part in item.split(":", 1)
+        )
+
+        if provider not in {"gemini", "openrouter"}:
+            raise ValueError(
+                f"Provider cadangan tidak didukung: {provider!r}"
+            )
+
+        if not model:
+            raise ValueError(
+                "Nama model cadangan tidak boleh kosong."
+            )
+
+        chain.append((provider, model))
+
+    return chain

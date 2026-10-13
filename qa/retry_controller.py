@@ -45,6 +45,7 @@ class RetryController:
         cache: TranslationCache | None = None,
         cache_model: str = "",
         refinement_engine=None,
+        cache_guard=None,
     ):
         if max_retries < 0:
             raise ValueError(
@@ -57,6 +58,7 @@ class RetryController:
         self.max_retries = max_retries
         self.cache = cache
         self.cache_model = cache_model
+        self.cache_guard = cache_guard
 
     @staticmethod
     def _context_state_from_value(
@@ -200,6 +202,9 @@ class RetryController:
         paragraph_translations,
     ) -> None:
         if self.cache is None:
+            return
+
+        if self.cache_guard is not None and not self.cache_guard():
             return
 
         key = self._build_cache_key(
