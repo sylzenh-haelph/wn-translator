@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 
 from translation.model_client import GeminiClient
 from research.entity_db import EntityDB
-from research.research_provider import DuckDuckGoResearchProvider
+from research.research_provider import TavilyResearchProvider
 from research.adaptive_research import AdaptiveResearchEngine
 from research.evidence_validator import EvidenceValidator
 
@@ -14,7 +14,7 @@ def main():
 
         db = EntityDB(tmp / "entities.json")
 
-        provider = DuckDuckGoResearchProvider(timeout=20)
+        provider = TavilyResearchProvider(timeout=20)
 
         client = GeminiClient(model="gemini-3.5-flash-lite")
 

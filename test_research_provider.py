@@ -1,15 +1,15 @@
-from research.research_provider import DuckDuckGoResearchProvider
+from research.research_provider import TavilyResearchProvider
 
 
 def main():
-    provider = DuckDuckGoResearchProvider(timeout=20)
+    provider = TavilyResearchProvider(timeout=20)
 
     results = provider.search(
         '"Oxford University" organization',
         max_results=5,
     )
 
-    print("=== DUCKDUCKGO PROVIDER TEST ===")
+    print("=== TAVILY PROVIDER TEST ===")
     print(f"Result count: {len(results)}")
 
     for i, result in enumerate(results, 1):
@@ -21,12 +21,12 @@ def main():
         print(f"Relevance: {result.relevance}")
         print(f"Snippet: {result.snippet[:300]}")
 
-    if results:
-        print()
-        print("RESEARCH PROVIDER: PASS")
-    else:
-        print()
-        print("RESEARCH PROVIDER: FAIL")
+    print()
+    print(
+        "RESEARCH PROVIDER: PASS"
+        if results
+        else "RESEARCH PROVIDER: FAIL"
+    )
 
 
 if __name__ == "__main__":

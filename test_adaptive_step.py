@@ -1,5 +1,5 @@
 from translation.model_client import GeminiClient
-from research.research_provider import DuckDuckGoResearchProvider
+from research.research_provider import TavilyResearchProvider
 from research.query_builder import build_adaptive_query
 from research.research_evaluator import evaluate_research
 
@@ -14,7 +14,7 @@ def main():
         "returning to the kingdom."
     )
 
-    provider = DuckDuckGoResearchProvider(timeout=20)
+    provider = TavilyResearchProvider(timeout=20)
     client = GeminiClient(model="gemini-3.5-flash-lite")
 
     for attempt in range(1, 4):

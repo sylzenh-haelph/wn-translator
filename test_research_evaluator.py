@@ -1,10 +1,10 @@
 from translation.model_client import GeminiClient
-from research.research_provider import DuckDuckGoResearchProvider
+from research.research_provider import TavilyResearchProvider
 from research.research_evaluator import evaluate_research
 
 
 def main():
-    provider = DuckDuckGoResearchProvider(timeout=20)
+    provider = TavilyResearchProvider(timeout=20)
 
     results = provider.search(
         '"Oxford University" organization',

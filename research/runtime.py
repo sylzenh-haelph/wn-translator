@@ -7,10 +7,7 @@ from research.adaptive_research import AdaptiveResearchEngine
 from research.chapter_entity_service import ChapterEntityService
 from research.entity_db import EntityDB
 from research.entity_pipeline import EntityResearchPipeline
-from research.research_provider import (
-    DuckDuckGoResearchProvider,
-    TavilyResearchProvider,
-)
+from research.research_provider import TavilyResearchProvider
 
 
 def build_research_service(
@@ -26,7 +23,7 @@ def build_research_service(
     Membuat seluruh research stack production.
 
     Alur:
-        DuckDuckGo
+        Tavily
             ↓
         AdaptiveResearchEngine
             ↓
@@ -45,17 +42,18 @@ def build_research_service(
     )
 
     tavily_api_key = os.environ.get("TAVILY_API_KEY")
-    if tavily_api_key:
-        provider = TavilyResearchProvider(
-            api_key=tavily_api_key,
-            timeout=research_timeout,
-            max_retries=research_max_retries,
+    if not tavily_api_key:
+        raise RuntimeError(
+            "TAVILY_API_KEY belum tersedia di environment. "
+            "Set TAVILY_API_KEY, atau matikan research dengan "
+            "WN_RESEARCH_ENABLED=0."
         )
-    else:
-        provider = DuckDuckGoResearchProvider(
-            timeout=research_timeout,
-            max_retries=research_max_retries,
-        )
+
+    provider = TavilyResearchProvider(
+        api_key=tavily_api_key,
+        timeout=research_timeout,
+        max_retries=research_max_retries,
+    )
 
     research_engine = AdaptiveResearchEngine(
         provider=provider,

@@ -4,7 +4,7 @@ from models.document import Document, Paragraph, TextRun
 from research.entity_pipeline import EntityResearchPipeline
 from research.entity_db import EntityDB
 from research.adaptive_research import AdaptiveResearchEngine
-from research.research_provider import DuckDuckGoResearchProvider
+from research.research_provider import TavilyResearchProvider
 from translation.model_client import GeminiClient
 
 
@@ -56,7 +56,7 @@ def main():
 # REAL WEB RESEARCH PROVIDER
 # ============================================================
 
-    research_provider = DuckDuckGoResearchProvider(
+    research_provider = TavilyResearchProvider(
         timeout=20,
         max_retries=2,
         retry_delay=1.5,
