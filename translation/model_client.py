@@ -6,6 +6,13 @@ import time
 import requests
 
 
+class ModelProviderError(RuntimeError):
+    def __init__(self, message, provider, status_code):
+        super().__init__(message)
+        self.provider = provider
+        self.status_code = status_code
+
+
 class GeminiClient:
     RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -85,7 +92,8 @@ class GeminiClient:
                     self._sleep_before_retry(response, attempt)
                     continue
 
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    raise self._build_api_error(response)
 
                 try:
                     data = response.json()
@@ -169,11 +177,17 @@ class GeminiClient:
             message = None
 
         if message:
-            return RuntimeError(
-                f"Gemini API HTTP {status}: {message}"
+            return ModelProviderError(
+                f"Gemini API HTTP {status}: {message}",
+                provider="gemini",
+                status_code=status,
             )
 
-        return RuntimeError(f"Gemini API HTTP {status}.")
+        return ModelProviderError(
+            f"Gemini API HTTP {status}.",
+            provider="gemini",
+            status_code=status,
+        )
 
     @staticmethod
     def _extract_text(data):
@@ -257,7 +271,8 @@ class OpenRouterClient:
                     self._sleep_before_retry(response,attempt)
                     continue
 
-                response.raise_for_status()
+                if response.status_code>=400:
+                    raise self._build_api_error(response)
 
                 try:
                     data=response.json()
@@ -324,11 +339,15 @@ class OpenRouterClient:
         except (ValueError,AttributeError):
             message=None
         if message:
-            return RuntimeError(
-                f"OpenRouter API HTTP {status}: {message}"
+            return ModelProviderError(
+                f"OpenRouter API HTTP {status}: {message}",
+                provider="openrouter",
+                status_code=status,
             )
-        return RuntimeError(
-            f"OpenRouter API HTTP {status}."
+        return ModelProviderError(
+            f"OpenRouter API HTTP {status}.",
+            provider="openrouter",
+            status_code=status,
         )
 
     @staticmethod
