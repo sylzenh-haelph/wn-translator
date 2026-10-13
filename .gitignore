@@ -36,3 +36,4 @@ outputs/
 
 # Local test/runtime data
 temp/
+.aider*
