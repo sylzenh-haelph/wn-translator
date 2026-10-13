@@ -57,6 +57,17 @@ Expected JSON:
             number = label_only.group(1)
             return f"Chapter {number} (Bab {number})"
 
+        # Judul yang hanya berisi label chapter tidak punya bagian
+        # yang bisa diterjemahkan, jadi tidak perlu memanggil model.
+        label_only = re.match(
+            r"^Chapter\s+(\d+)$",
+            title.strip(),
+            flags=re.IGNORECASE,
+        )
+        if label_only:
+            number = label_only.group(1)
+            return f"Chapter {number} (Bab {number})"
+
         entities = []
 
         for entity in entity_resolutions or []:
@@ -157,6 +168,15 @@ Translate the chapter title now.
         if not indonesian_title:
             raise ValueError(
                 "Terjemahan Indonesia pada judul kosong."
+            )
+
+        if re.fullmatch(
+            r"Chapter\s+\d+",
+            indonesian_title,
+            flags=re.IGNORECASE,
+        ):
+            raise ValueError(
+                "Terjemahan Indonesia hanya berisi label chapter."
             )
 
         if re.fullmatch(
