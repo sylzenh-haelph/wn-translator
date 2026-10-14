@@ -24,11 +24,23 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.runtime import build_chapter_processor
+from translation.runtime import build_chapter_processor, build_failover_client
 
 
 SUPPORTED_INPUTS = {".epub", ".docx"}
 SUPPORTED_OUTPUTS = {".epub", ".docx"}
+
+
+def make_failover_logger(logger, role):
+    def notify(label, exc):
+        message = (
+            f"{role} gagal di {label}, pindah ke cadangan. "
+            f"Penyebab: {exc}"
+        )
+        print(f"  WARNING: {message}")
+        logger.warning(message)
+
+    return notify
 
 
 def parse_document(path: Path):
@@ -1407,6 +1419,7 @@ def main():
         processor = build_chapter_processor(
             progress_path,
             config=config,
+            on_failover=make_failover_logger(logger, "Translasi"),
         )
 
         # --------------------------------------------------
@@ -1425,17 +1438,16 @@ def main():
                 "Entity research initialization started"
             )
 
-            # Research menggunakan model role khusus
-            # yang terpisah dari translation runtime.
-            from translation.model_client import create_model_client
-
-            research_client = create_model_client(
-                provider=config.research_provider,
-                model=config.research_model,
-                api_key=config.get_api_key(config.research_provider),
+            # Research memakai client dengan cadangan (research_fallbacks).
+            research_client = build_failover_client(
+                config,
+                role="Research",
+                primary_provider=config.research_provider,
+                primary_model=config.research_model,
+                fallbacks=config.research_fallbacks,
                 max_retries=config.research_max_retries,
                 timeout=config.research_timeout,
-                backoff_base=config.backoff_base,
+                on_failover=make_failover_logger(logger, "Research"),
             )
 
             entity_service = build_research_service(

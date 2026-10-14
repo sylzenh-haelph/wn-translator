@@ -21,14 +21,24 @@ def primary_translation_label(config: AppConfig) -> str:
     return f"{config.translation_provider}:{config.translation_model}"
 
 
-def build_translation_client(config: AppConfig) -> FailoverModelClient:
+def build_failover_client(
+    config: AppConfig,
+    *,
+    role: str,
+    primary_provider: str,
+    primary_model: str,
+    fallbacks: str,
+    max_retries: int,
+    timeout: int,
+    on_failover=None,
+) -> FailoverModelClient:
     """
-    Client translasi utama, diikuti cadangan dari translation_fallbacks.
-    Cadangan dicoba berurutan saat client sebelumnya gagal total.
+    Client untuk satu role: model utama, diikuti cadangan berurutan.
+    Cadangan dicoba saat client sebelumnya gagal total.
     """
     targets = [
-        (config.translation_provider, config.translation_model),
-        *parse_model_chain(config.translation_fallbacks),
+        (primary_provider, primary_model),
+        *parse_model_chain(fallbacks),
     ]
 
     clients = []
@@ -40,16 +50,17 @@ def build_translation_client(config: AppConfig) -> FailoverModelClient:
                 provider=provider,
                 model=model,
                 api_key=config.get_api_key(provider),
-                max_retries=config.max_retries,
-                timeout=config.timeout,
+                max_retries=max_retries,
+                timeout=timeout,
                 backoff_base=config.backoff_base,
             )
         )
         labels.append(f"{provider}:{model}")
 
-    def on_failover(label, exc):
+    def default_notify(label, exc):
         logger.warning(
-            "Translasi gagal di %s, pindah ke cadangan. Penyebab: %s",
+            "%s gagal di %s, pindah ke cadangan. Penyebab: %s",
+            role,
             label,
             exc,
         )
@@ -57,6 +68,22 @@ def build_translation_client(config: AppConfig) -> FailoverModelClient:
     return FailoverModelClient(
         clients,
         labels=labels,
+        on_failover=on_failover or default_notify,
+    )
+
+
+def build_translation_client(
+    config: AppConfig,
+    on_failover=None,
+) -> FailoverModelClient:
+    return build_failover_client(
+        config,
+        role="Translasi",
+        primary_provider=config.translation_provider,
+        primary_model=config.translation_model,
+        fallbacks=config.translation_fallbacks,
+        max_retries=config.max_retries,
+        timeout=config.timeout,
         on_failover=on_failover,
     )
 
@@ -64,6 +91,7 @@ def build_translation_client(config: AppConfig) -> FailoverModelClient:
 def build_chapter_processor(
     progress_dir,
     config: AppConfig,
+    on_failover=None,
 ):
     progress_path = Path(progress_dir)
 
@@ -81,7 +109,10 @@ def build_chapter_processor(
         exist_ok=True,
     )
 
-    translation_client = build_translation_client(config)
+    translation_client = build_translation_client(
+        config,
+        on_failover=on_failover,
+    )
     primary_label = primary_translation_label(config)
 
     translation_engine = TranslationEngine(

@@ -18,6 +18,7 @@ class AppConfig:
     translation_model: str = "tencent/hy-mt2-30b-a3b"
     research_provider: str = "openrouter"
     research_model: str = "qwen/qwen3.5-35b-a3b"
+    research_fallbacks: str = "gemini:gemini-3.1-flash-lite"
     refinement_provider: str = "gemini"
     refinement_model: str = "gemma-4-31b-it"
     orchestration_provider: str = "gemini"
@@ -108,6 +109,7 @@ class AppConfig:
                 )
 
         parse_model_chain(self.translation_fallbacks)
+        parse_model_chain(self.research_fallbacks)
 
         if self.max_retries < 0:
             raise ValueError(
@@ -183,6 +185,7 @@ _CONFIG_FIELDS = {
     "translation_model": str,
     "research_provider": str,
     "research_model": str,
+    "research_fallbacks": str,
     "refinement_provider": str,
     "refinement_model": str,
     "orchestration_provider": str,
