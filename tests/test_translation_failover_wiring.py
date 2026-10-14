@@ -57,10 +57,10 @@ def fake_qa(source_text, translation, preserved_entities):
 def test_parse_model_chain():
     assert parse_model_chain("") == []
     assert parse_model_chain(
-        "gemini:gemma-4-31b-it, openrouter:deepseek/deepseek-r1:free"
+        "gemini:gemma-4-31b-it, gemini:gemini-3.1-flash-lite"
     ) == [
         ("gemini", "gemma-4-31b-it"),
-        ("openrouter", "deepseek/deepseek-r1:free"),
+        ("gemini", "gemini-3.1-flash-lite"),
     ]
 
 
@@ -69,52 +69,43 @@ def test_parse_model_chain_rejects_missing_provider():
         parse_model_chain("gemma-4-31b-it")
 
 
+def test_parse_model_chain_rejects_openrouter():
+    with pytest.raises(ValueError):
+        parse_model_chain("openrouter:deepseek/deepseek-r1:free")
+
+
 def test_translation_client_is_primary_then_fallbacks(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter")
     created = []
 
-    def fake_create(
-        provider,
-        model,
-        api_key,
-        max_retries,
-        timeout,
-        backoff_base,
-    ):
+    def fake_create(provider, model, api_key, max_retries, timeout, backoff_base):
         created.append((provider, model))
         return FakeClient(f"{provider}:{model}")
 
     monkeypatch.setattr(runtime, "create_model_client", fake_create)
 
-    config = AppConfig(
-        translation_fallbacks=(
-            "gemini:gemma-4-31b-it,gemini:gemini-3.1-flash-lite"
-        ),
-    )
-
+    config = AppConfig()
     client = runtime.build_translation_client(config)
 
     assert isinstance(client, FailoverModelClient)
     assert created == [
-        ("openrouter", "tencent/hy-mt2-30b-a3b"),
         ("gemini", "gemma-4-31b-it"),
         ("gemini", "gemini-3.1-flash-lite"),
     ]
-    assert client.labels[0] == "openrouter:tencent/hy-mt2-30b-a3b"
+    assert client.labels[0] == "gemini:gemma-4-31b-it"
 
 
 def test_failover_uses_fallback_and_reports_primary():
     events = []
     client = FailoverModelClient(
         [FakeClient("primary", fail=True), FakeClient("backup")],
-        labels=["openrouter:hy", "gemini:gemma"],
+        labels=["gemini:gemma-4-31b-it", "gemini:gemini-3.1-flash-lite"],
         on_failover=lambda label, exc: events.append(label),
     )
 
     assert client.generate("x") == "backup"
-    assert client.last_used == "gemini:gemma"
-    assert events == ["openrouter:hy"]
+    assert client.last_used == "gemini:gemini-3.1-flash-lite"
+    assert events == ["gemini:gemma-4-31b-it"]
 
 
 def _run_with_guard(guard_value):

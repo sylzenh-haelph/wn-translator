@@ -14,16 +14,16 @@ class AppConfig:
     model: str = "gemini-3.1-flash-lite"
 
     # AI workload roles
-    translation_provider: str = "openrouter"
-    translation_model: str = "tencent/hy-mt2-30b-a3b"
-    research_provider: str = "openrouter"
-    research_model: str = "qwen/qwen3.5-35b-a3b"
-    research_fallbacks: str = "gemini:gemini-3.1-flash-lite"
+    translation_provider: str = "gemini"
+    translation_model: str = "gemma-4-31b-it"
+    research_provider: str = "gemini"
+    research_model: str = "gemini-3.1-flash-lite"
+    research_fallbacks: str = "gemini:gemma-4-31b-it"
     refinement_provider: str = "gemini"
     refinement_model: str = "gemma-4-31b-it"
     orchestration_provider: str = "gemini"
     orchestration_model: str = "gemini-3.1-flash-lite"
-    translation_fallbacks: str = "gemini:gemma-4-31b-it,gemini:gemini-3.1-flash-lite"
+    translation_fallbacks: str = "gemini:gemini-3.1-flash-lite"
     max_retries: int = 3
     timeout: int = 120
     backoff_base: float = 2.0
@@ -47,20 +47,9 @@ class AppConfig:
     qa_enabled: bool = True
     qa_max_retries: int = 2
 
-    @property
-    def openrouter_api_key(self) -> str:
-        key=os.environ.get("OPENROUTER_API_KEY")
-        if not key:
-            raise RuntimeError(
-                "OPENROUTER_API_KEY belum tersedia di environment."
-            )
-        return key
-
     def get_api_key(self, provider: str) -> str:
         if provider == "gemini":
             return self.gemini_api_key
-        if provider == "openrouter":
-            return self.openrouter_api_key
         raise ValueError(
             f"Provider AI tidak didukung: {provider!r}"
         )
@@ -81,9 +70,9 @@ class AppConfig:
         return key
 
     def validate(self) -> None:
-        if self.provider not in {"gemini", "openrouter"}:
+        if self.provider != "gemini":
             raise ValueError(
-                "provider harus 'gemini' atau 'openrouter'."
+                "provider harus 'gemini'."
             )
 
         if not self.model.strip():
@@ -99,9 +88,9 @@ class AppConfig:
         )
 
         for role, provider, model in role_configs:
-            if provider not in {"gemini", "openrouter"}:
+            if provider != "gemini":
                 raise ValueError(
-                    f"{role}_provider harus 'gemini' atau 'openrouter'."
+                    f"{role}_provider harus 'gemini'."
                 )
             if not model.strip():
                 raise ValueError(
@@ -399,7 +388,7 @@ def parse_model_chain(value: str) -> list[tuple[str, str]]:
             part.strip() for part in item.split(":", 1)
         )
 
-        if provider not in {"gemini", "openrouter"}:
+        if provider != "gemini":
             raise ValueError(
                 f"Provider cadangan tidak didukung: {provider!r}"
             )

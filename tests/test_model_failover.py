@@ -9,7 +9,7 @@ sys.path.insert(
 import pytest
 
 from translation import model_client as mc
-from translation.model_client import ModelProviderError, OpenRouterClient
+from translation.model_client import GeminiClient, ModelProviderError
 from translation.model_failover import FailoverModelClient
 
 
@@ -42,8 +42,8 @@ def test_primary_used_when_healthy():
 def test_fails_over_on_provider_error_and_records_label():
     primary = Failing(
         ModelProviderError(
-            "OpenRouter API HTTP 402",
-            provider="openrouter",
+            "Gemini API HTTP 402",
+            provider="gemini",
             status_code=402,
         )
     )
@@ -79,7 +79,7 @@ def test_all_failing_raises_with_details():
         client.generate("x")
 
 
-def test_openrouter_402_is_typed(monkeypatch):
+def test_gemini_402_is_typed(monkeypatch):
     class FakeResponse:
         status_code = 402
         headers = {}
@@ -89,10 +89,10 @@ def test_openrouter_402_is_typed(monkeypatch):
 
     monkeypatch.setattr(mc.requests, "post", lambda *a, **k: FakeResponse())
 
-    client = OpenRouterClient("tencent/hy-mt2-30b-a3b", api_key="test")
+    client = GeminiClient("gemma-4-31b-it", api_key="test")
 
     with pytest.raises(ModelProviderError) as info:
         client.generate("x")
 
     assert info.value.status_code == 402
-    assert info.value.provider == "openrouter"
+    assert info.value.provider == "gemini"

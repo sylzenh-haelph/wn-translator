@@ -112,9 +112,9 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
     )
 
     config = AppConfig(
-        translation_provider="openrouter",
+        translation_provider="gemini",
         translation_model="translation-model",
-        research_provider="openrouter",
+        research_provider="gemini",
         research_model="research-model",
         refinement_provider="gemini",
         refinement_model="refinement-model",
@@ -133,7 +133,7 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
     translation_client = created_clients[0]
     refinement_client = created_clients[1]
 
-    assert translation_client.provider == "openrouter"
+    assert translation_client.provider == "gemini"
     assert translation_client.model == "translation-model"
 
     assert refinement_client.provider == "gemini"
@@ -148,7 +148,7 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
     )
     assert translation_engine_client.clients == [translation_client]
     assert translation_engine_client.labels == [
-        "openrouter:translation-model",
+        "gemini:translation-model",
     ]
     assert (
         processor.retry_controller.cache_model
