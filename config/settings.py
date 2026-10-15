@@ -40,7 +40,7 @@ class AppConfig:
     # Research
     research_enabled: bool = True
     research_timeout: int = 20
-    research_max_retries: int = 1
+    research_max_retries: int = 3
     research_max_attempts: int = 4
 
     # QA

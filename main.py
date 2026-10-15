@@ -830,14 +830,25 @@ def process_chapters(
                     f"{chapter.chapter_id}"
                 )
 
-            entity_result = entity_service.process_chapter(
-                chapter_id=chapter.chapter_id,
-                paragraphs=chapter.paragraphs,
-            )
+            try:
+                entity_result = entity_service.process_chapter(
+                    chapter_id=chapter.chapter_id,
+                    paragraphs=chapter.paragraphs,
+                )
 
-            resolved_entities = list(
-                entity_result.entities
-            )
+                resolved_entities = list(
+                    entity_result.entities
+                )
+            except Exception as exc:
+                resolved_entities = []
+                print(
+                    f"  WARNING: research gagal, lanjut tanpa entitas: {exc}"
+                )
+                if logger:
+                    logger.warning(
+                        f"Entity research failed, continuing without entities: "
+                        f"{chapter.chapter_id} | {exc}"
+                    )
 
             print(
                 f"  Entities  : "
@@ -901,13 +912,24 @@ def process_chapters(
             "author": document.author,
         }
 
-        result = processor.process_chapter(
-            chapter_id=chapter.chapter_id,
-            chunks=chunks,
-            chapter_context=chapter_context,
-            initial_context_state=None,
-            entity_resolutions=resolved_entities,
-        )
+        try:
+            result = processor.process_chapter(
+                chapter_id=chapter.chapter_id,
+                chunks=chunks,
+                chapter_context=chapter_context,
+                initial_context_state=None,
+                entity_resolutions=resolved_entities,
+            )
+        except Exception as exc:
+            result = []
+            print(
+                f"  WARNING: terjemahan chapter gagal, chapter dibiarkan asli: {exc}"
+            )
+            if logger:
+                logger.warning(
+                    f"Chapter translation error: "
+                    f"{chapter.chapter_id} | {exc}"
+                )
 
         print(
             f"  Processed : {len(result)} chunk"
