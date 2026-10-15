@@ -316,9 +316,15 @@ class RetryController:
                 )
             ]
 
+            qa_translation = (
+                "\n".join(paragraph_translations)
+                if paragraph_translations
+                else translation
+            )
+
             qa_result = self.qa_function(
                 source_text=chunk.text,
-                translation=translation,
+                translation=qa_translation,
                 preserved_entities=preserved_entities,
             )
 
