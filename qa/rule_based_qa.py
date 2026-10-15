@@ -69,24 +69,35 @@ def _check_paragraph_count(
 
 
 def _check_empty_paragraphs(
+    source_text,
     translation,
     issues,
 ):
     if not translation:
         return
 
-    paragraphs = translation.split("\n")
+    source_lines = (source_text or "").split("\n")
+    translation_lines = translation.split("\n")
 
-    for index, paragraph in enumerate(paragraphs):
-        if not paragraph.strip():
-            issues.append(
-                QAIssue(
-                    rule="empty_paragraph",
-                    message=(
-                        f"Paragraph output ke-{index + 1} kosong."
-                    ),
-                )
+    for index, paragraph in enumerate(translation_lines):
+        if paragraph.strip():
+            continue
+
+        source_blank = (
+            index < len(source_lines)
+            and not source_lines[index].strip()
+        )
+        if source_blank:
+            continue
+
+        issues.append(
+            QAIssue(
+                rule="empty_paragraph",
+                message=(
+                    f"Paragraph output ke-{index + 1} kosong."
+                ),
             )
+        )
 
 
 def _check_preserved_entities(
@@ -178,6 +189,7 @@ def run_qa(
     )
 
     _check_empty_paragraphs(
+        source_text,
         translation,
         issues,
     )
