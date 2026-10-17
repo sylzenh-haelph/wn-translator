@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 
 
@@ -169,6 +170,35 @@ def _check_unexpected_output(
             )
 
 
+UNTRANSLATED_WORDS = {
+    "the", "and", "you", "that", "this", "what", "is", "are", "was",
+    "to", "of", "it", "my", "me", "your", "with", "for", "not", "but",
+    "just", "so", "want", "how", "can", "be", "do", "i",
+}
+
+
+def _check_untranslated_english(translation, issues):
+    if not translation:
+        return
+
+    for index, paragraph in enumerate(translation.split("\n")):
+        words = re.findall(r"[A-Za-z']+", paragraph.lower())
+        if len(words) < 4:
+            continue
+
+        english = sum(word in UNTRANSLATED_WORDS for word in words)
+        if english / len(words) >= 0.25:
+            issues.append(
+                QAIssue(
+                    rule="untranslated_english",
+                    message=(
+                        f"Paragraph output ke-{index + 1} "
+                        f"masih berbahasa Inggris."
+                    ),
+                )
+            )
+
+
 def run_qa(
     source_text,
     translation,
@@ -202,6 +232,11 @@ def run_qa(
     )
 
     _check_unexpected_output(
+        translation,
+        issues,
+    )
+
+    _check_untranslated_english(
         translation,
         issues,
     )

@@ -43,6 +43,10 @@ Preserve:
 - paragraph boundaries
 - correct existing wording whenever possible
 
+Translate EVERY English sentence into Indonesian, including all
+dialogue and quoted speech. Keep English only for proper nouns
+given in ENTITY RESOLUTIONS.
+
 IMMUTABLE PARAGRAPH RULE:
 1 source paragraph MUST produce exactly 1 translated paragraph.
 Never merge, split, reorder, omit, or invent paragraphs.

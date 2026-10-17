@@ -33,6 +33,10 @@ Translate naturally into high-quality Indonesian while preserving:
 - proper nouns according to the supplied entity rules
 - formatting intent represented by the source structure
 
+Translate EVERY English sentence into Indonesian, including all
+dialogue and quoted speech. Keep English only for proper nouns
+given in ENTITY RESOLUTIONS.
+
 IMMUTABLE PARAGRAPH RULE:
 1 source paragraph MUST produce exactly 1 translated paragraph.
 Never merge, split, reorder, omit, or invent paragraphs.
