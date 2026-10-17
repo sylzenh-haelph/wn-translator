@@ -643,6 +643,14 @@ def parse_chapter_selection(value: str) -> tuple[int, int]:
     return number, number
 
 
+def chapter_action(selected: bool, processor, chapter_id: str) -> str:
+    """Chapter di luar pilihan tetap dipakai kalau sudah selesai."""
+    if selected:
+        return "translate"
+    status = processor.progress_db.load(chapter_id)["status"]
+    return "restore" if status == "completed" else "skip"
+
+
 def process_chapters(
     document,
     processor,
@@ -718,7 +726,12 @@ def process_chapters(
         start=1,
     ):
         print()
-        if (index - 1) not in selected_indexes:
+        action = chapter_action(
+            (index - 1) in selected_indexes,
+            processor,
+            chapter.chapter_id,
+        )
+        if action == "skip":
             if logger:
                 logger.info(
                     f"Chapter skipped by selection: "
@@ -726,6 +739,7 @@ def process_chapters(
                     f"{chapter.title}"
                 )
             continue
+        restore_only = action == "restore"
 
         print(
             f"[{index}/{len(chapters)}] "
@@ -821,7 +835,7 @@ def process_chapters(
 
         resolved_entities = []
 
-        if entity_service is not None:
+        if entity_service is not None and not restore_only:
             print("  Research  : analyzing entities...")
 
             if logger:
@@ -1025,6 +1039,7 @@ def process_chapters(
 
         if (
             export_chapters
+            and not restore_only
             and chapter_output_dir is not None
             and input_path is not None
         ):

@@ -57,11 +57,18 @@ class FakeTitleTranslator:
 
 
 class FakeProcessor:
-    def __init__(self):
+    def __init__(self, completed=()):
         self.translation_engine = SimpleNamespace(
             client=object()
         )
         self.calls = []
+        self.progress_db = SimpleNamespace(
+            load=lambda chapter_id: {
+                "status": "completed"
+                if chapter_id in completed
+                else "not_started"
+            }
+        )
 
     def process_chapter(
         self,
@@ -199,6 +206,43 @@ def test_chapter_range_selection(monkeypatch):
 
     assert stats.total_chapters == 2
     assert stats.completed_chapters == 2
+
+
+def test_completed_chapter_outside_selection_is_restored(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "DocumentChapterSplitter",
+        lambda: FakeSplitter(),
+    )
+    monkeypatch.setattr(
+        main,
+        "ChapterTitleTranslator",
+        FakeTitleTranslator,
+    )
+
+    document = Document(
+        title="Test Novel",
+        author="Test Author",
+    )
+
+    processor = FakeProcessor(completed={"chapter_001"})
+
+    config = SimpleNamespace(
+        max_chunk_tokens=1000,
+    )
+
+    translated_chapters, stats = main.process_chapters(
+        document=document,
+        processor=processor,
+        config=config,
+        chapter_selection=(2, 2),
+    )
+
+    assert processor.calls == ["chapter_001", "chapter_002"]
+    assert (
+        translated_chapters[0].paragraphs[0].text
+        == "TRANSLATED SOURCE ONE"
+    )
 
 
 if __name__ == "__main__":
