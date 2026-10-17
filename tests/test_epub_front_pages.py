@@ -8,11 +8,11 @@ sys.path.insert(
 )
 
 from models.document import Document, Paragraph, TextRun
-from reconstruction.epub_reconstructor import _strip_chapter_prefix, reconstruct_epub
+from reconstruction.epub_reconstructor import LINE_BREAK, _strip_chapter_prefix, reconstruct_epub
 
 
 def test_strip_chapter_prefix_keeps_name_only():
-    assert _strip_chapter_prefix("Bab 1: Buku Harian (Bagian 1)") == "Buku Harian (Bagian 1)"
+    assert _strip_chapter_prefix("Bab 1: Buku Harian (Bagian 1)") == "Bab 1" + LINE_BREAK + "Buku Harian (Bagian 1)"
     assert _strip_chapter_prefix("Halo dunia") == "Halo dunia"
 
 

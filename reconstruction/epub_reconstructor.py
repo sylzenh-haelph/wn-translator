@@ -1,4 +1,5 @@
 import re
+import re
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import unquote
@@ -555,12 +556,16 @@ def _can_use_xhtml_source(
     return True
 
 
-CHAPTER_PREFIX_RE = re.compile(r"^(Bab|Chapter|Extra Chapter)\b[^:]*:\s*")
+LINE_BREAK = "\u241e"
+CHAPTER_PREFIX_RE = re.compile(r"^((?:Bab|Chapter|Extra Chapter)[^:]*?):\s*")
 
 
 def _strip_chapter_prefix(text):
-    """Buang 'Bab N:' dari judul di badan chapter, sisakan nama di bawahnya."""
-    return CHAPTER_PREFIX_RE.sub("", text, count=1)
+    """Judul badan chapter: 'Bab N' di baris atas, nama di baris bawah."""
+    match = CHAPTER_PREFIX_RE.match(text)
+    if not match:
+        return text
+    return match.group(1).strip() + LINE_BREAK + text[match.end():]
 
 
 def _inject_translated_xhtml(
@@ -599,12 +604,14 @@ def _inject_translated_xhtml(
             title_text = paragraph.text
             break
 
-    return inject_xhtml_text(
+    html = inject_xhtml_text(
         original,
         paragraph_ids,
         paragraph_texts,
         title_text=title_text,
     )
+    # shortcut: <br/> hanya untuk halaman dengan XHTML sumber, halaman tanpa sumber masih satu baris
+    return html.replace(LINE_BREAK, "<br/>")
 
 
 def _update_ncx_source(

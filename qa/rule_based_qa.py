@@ -199,6 +199,21 @@ def _check_untranslated_english(translation, issues):
             )
 
 
+def _check_source_echo(translation, issues):
+    # shortcut: hanya pola panah "->" atau "→", echo tanpa panah belum tertangkap, naikkan jika muncul lagi
+    for index, paragraph in enumerate(translation.split("\n")):
+        if "->" in paragraph or "→" in paragraph:
+            issues.append(
+                QAIssue(
+                    rule="source_echo",
+                    message=(
+                        f"Paragraph output ke-{index + 1} "
+                        f"memuat teks sumber."
+                    ),
+                )
+            )
+
+
 def run_qa(
     source_text,
     translation,
@@ -237,6 +252,11 @@ def run_qa(
     )
 
     _check_untranslated_english(
+        translation,
+        issues,
+    )
+
+    _check_source_echo(
         translation,
         issues,
     )

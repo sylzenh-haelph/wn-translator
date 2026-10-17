@@ -27,3 +27,11 @@ def test_untranslated_english_paragraph_is_flagged():
         translation="Alice memasuki istana.\n\"But please, don't just disappear on me...\"",
     )
     assert "untranslated_english" in rules(bad)
+
+
+def test_source_echo_arrow_is_flagged():
+    result = run_qa(
+        source_text="Alice entered the palace.",
+        translation="\"Isn't there another option?\" -> \"Apa tidak ada pilihan lain?\"",
+    )
+    assert "source_echo" in [issue.rule for issue in result.issues]
