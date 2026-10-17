@@ -926,7 +926,7 @@ def process_chapters(
                 f"  WARNING: terjemahan chapter gagal, chapter dibiarkan asli: {exc}"
             )
             if logger:
-                logger.warning(
+                logger.exception(
                     f"Chapter translation error: "
                     f"{chapter.chapter_id} | {exc}"
                 )
