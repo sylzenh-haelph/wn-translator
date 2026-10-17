@@ -31,6 +31,9 @@ class FakeEntityService:
 class FakeProcessor:
     def __init__(self):
         self.calls = []
+        self.progress_db = SimpleNamespace(
+            load=lambda chapter_id: {"status": "not_started"}
+        )
         self.translation_engine = SimpleNamespace(
             client=SimpleNamespace()
         )

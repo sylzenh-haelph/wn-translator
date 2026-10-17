@@ -24,7 +24,7 @@ class FakeProcessor:
 
 def test_chapter_action():
     assert chapter_action(True, FakeProcessor("not_started"), "c") == "translate"
-    assert chapter_action(True, FakeProcessor("completed"), "c") == "translate"
+    assert chapter_action(True, FakeProcessor("completed"), "c") == "restore"
     assert chapter_action(False, FakeProcessor("completed"), "c") == "restore"
     assert chapter_action(False, FakeProcessor("in_progress"), "c") == "skip"
     assert chapter_action(False, FakeProcessor("not_started"), "c") == "skip"

@@ -644,11 +644,11 @@ def parse_chapter_selection(value: str) -> tuple[int, int]:
 
 
 def chapter_action(selected: bool, processor, chapter_id: str) -> str:
-    """Chapter di luar pilihan tetap dipakai kalau sudah selesai."""
-    if selected:
-        return "translate"
+    """Chapter yang sudah selesai dipulihkan tanpa riset ulang."""
     status = processor.progress_db.load(chapter_id)["status"]
-    return "restore" if status == "completed" else "skip"
+    if status == "completed":
+        return "restore"
+    return "translate" if selected else "skip"
 
 
 def process_chapters(
@@ -709,6 +709,7 @@ def process_chapters(
     title_translator = ChapterTitleTranslator(processor.translation_engine.client)
 
     translated_chapters = []
+    failed_ids = []
     stats = TranslationStats()
     translation_started = time.monotonic()
 
@@ -936,6 +937,7 @@ def process_chapters(
             )
         except Exception as exc:
             result = []
+            failed_ids.append(chapter.chapter_id)
             print(
                 f"  WARNING: terjemahan chapter gagal, chapter dibiarkan asli: {exc}"
             )
@@ -1060,6 +1062,7 @@ def process_chapters(
             )
 
     stats.finish(time.monotonic() - translation_started)
+    stats.failed_chapters = failed_ids
 
     # DocumentAssembler expects the complete chapter sequence.
     # Selected chapters use their translated reconstruction;
@@ -1542,18 +1545,35 @@ def main():
                 f"{chapter_selection[1]}"
             )
 
-        translated_chapters, translation_stats = process_chapters(
-            document,
-            processor,
-            config,
-            logger=logger,
-            entity_service=entity_service,
-            export_chapters=args.export_chapters,
-            chapter_output_dir=chapter_output_dir,
-            output_suffix=output_path.suffix.lower(),
-            input_path=input_path,
-            chapter_selection=chapter_selection,
-        )
+        for retry_round in range(1, 4):
+            try:
+                translated_chapters, translation_stats = process_chapters(
+                    document,
+                    processor,
+                    config,
+                    logger=logger,
+                    entity_service=entity_service,
+                    export_chapters=args.export_chapters,
+                    chapter_output_dir=chapter_output_dir,
+                    output_suffix=output_path.suffix.lower(),
+                    input_path=input_path,
+                    chapter_selection=chapter_selection,
+                )
+            except Exception as exc:
+                if retry_round == 3:
+                    raise
+                print(f"\nERROR: {exc}. Diulang setelah 60 detik.")
+                time.sleep(60)
+                continue
+
+            failed = translation_stats.failed_chapters
+            if not failed or retry_round == 3:
+                break
+            print(
+                f"\nChapter gagal: {', '.join(failed)}. "
+                f"Diulang setelah 60 detik (putaran {retry_round + 1}/3)."
+            )
+            time.sleep(60)
 
         stats_path = project_dir / "stats" / "translation_stats.json"
         translation_stats.save(stats_path)
