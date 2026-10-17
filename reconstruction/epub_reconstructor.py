@@ -1,3 +1,4 @@
+import re
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import unquote
@@ -554,6 +555,14 @@ def _can_use_xhtml_source(
     return True
 
 
+CHAPTER_PREFIX_RE = re.compile(r"^(Bab|Chapter|Extra Chapter)\b[^:]*:\s*")
+
+
+def _strip_chapter_prefix(text):
+    """Buang 'Bab N:' dari judul di badan chapter, sisakan nama di bawahnya."""
+    return CHAPTER_PREFIX_RE.sub("", text, count=1)
+
+
 def _inject_translated_xhtml(
     document,
     structure,
@@ -577,6 +586,11 @@ def _inject_translated_xhtml(
         paragraph.id: paragraph.text
         for paragraph in paragraphs
     }
+    if paragraph_ids:
+        first_id = paragraph_ids[0]
+        paragraph_texts[first_id] = _strip_chapter_prefix(
+            paragraph_texts[first_id]
+        )
 
     title_text = None
 
@@ -754,6 +768,11 @@ def reconstruct_epub(
         "OEBPS/content.opf",
     )
 
+    source_names = set()
+    if source_path is not None and Path(source_path).exists():
+        with ZipFile(source_path, "r") as source_zip:
+            source_names = set(source_zip.namelist())
+
     generated_paths = {
         "mimetype",
         "META-INF/container.xml",
@@ -791,6 +810,10 @@ def reconstruct_epub(
             idref,
             [],
         )
+
+        # Halaman tanpa teks (sampul, ilustrasi) dipakai apa adanya dari EPUB sumber.
+        if not paragraphs and xhtml_path in source_names:
+            continue
 
         if _can_use_xhtml_source(
             document,
