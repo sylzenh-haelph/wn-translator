@@ -1,9 +1,12 @@
+import re
 from dataclasses import dataclass, field
 
 from models.document import Document, Paragraph
 from translation.epub_spine_classifier import (
     classify_spine_document,
 )
+
+CHAPTER_TITLE_RE = re.compile(r"^(Chapter|Extra Chapter)\b", re.I)
 
 
 @dataclass
@@ -182,6 +185,15 @@ class DocumentChapterSplitter:
                     heading = paragraph
                     title = paragraph.text.strip()
                     break
+
+            # Judul bab sering berupa paragraf biasa, bukan heading.
+            # Heading tetap di isi agar chunk yang sudah ada tidak berubah.
+            if not title:
+                for paragraph in source_paragraphs:
+                    text = paragraph.text.strip()
+                    if CHAPTER_TITLE_RE.match(text):
+                        title = text
+                        break
 
             if not title:
                 title = (
