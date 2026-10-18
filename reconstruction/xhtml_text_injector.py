@@ -95,8 +95,11 @@ class XHTMLTextInjector:
             paragraph_tag.append(translated_text)
             return
 
-        if len(text_nodes) == 1:
+        # shortcut: judul bertanda \u241e disisip utuh ke node pertama, teks lain dibagi proporsional
+        if len(text_nodes) == 1 or "\u241e" in translated_text:
             text_nodes[0].replace_with(translated_text)
+            for node in text_nodes[1:]:
+                node.replace_with("")
             return
 
         source_lengths = [
