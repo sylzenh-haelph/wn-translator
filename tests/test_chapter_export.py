@@ -19,10 +19,10 @@ def test_safe_chapter_filename():
 
     name = _safe_chapter_filename(chapter, 1, ".epub")
 
-    assert name == "chapter-01-The Gate (Gerbang).epub"
+    assert name == "chapter-01.epub"
 
 
-def test_safe_chapter_filename_falls_back_to_original_title():
+def test_safe_chapter_filename_ignores_title():
     chapter = SimpleNamespace(
         translated_title=None,
         title="Chapter 2: The Ruins"
@@ -30,7 +30,7 @@ def test_safe_chapter_filename_falls_back_to_original_title():
 
     name = _safe_chapter_filename(chapter, 2, ".epub")
 
-    assert name == "chapter-02-The Ruins.epub"
+    assert name == "chapter-02.epub"
 
 
 def test_build_chapter_document():

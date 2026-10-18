@@ -7,6 +7,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parent.parent),
 )
 
+import json
 import main
 from models.document import Document, Paragraph, TextRun
 from translation.chapter_splitter import DocumentChapter
@@ -54,3 +55,20 @@ def test_failed_chapter_is_recorded_for_retry(monkeypatch):
     )
 
     assert stats.failed_chapters == ["chapter_001"]
+
+
+def test_chapter_list_is_saved_for_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "DocumentChapterSplitter", lambda: OneChapterSplitter())
+    monkeypatch.setattr(main, "ChapterTitleTranslator", FakeTitleTranslator)
+    list_path = tmp_path / "chapters.json"
+
+    main.process_chapters(
+        document=Document(title="Test", author="Test"),
+        processor=FailingProcessor(),
+        config=SimpleNamespace(max_chunk_tokens=1000),
+        chapter_list_path=list_path,
+    )
+
+    assert json.loads(list_path.read_text(encoding="utf-8")) == [
+        {"id": "chapter_001", "title": "Chapter 1: First"}
+    ]

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from config.settings import load_config
 from parsers.docx_parser import parse_docx
@@ -288,22 +290,8 @@ def reconstruct_output(
 
 
 def _safe_chapter_filename(chapter, index, suffix):
-    import re
-
-    title = (
-        getattr(chapter, "translated_title", None)
-        or getattr(chapter, "title", None)
-        or f"Chapter {index}"
-    )
-
-    title = re.sub(r"^Chapter\s+\d+\s*:\s*", "", title, flags=re.I)
-    title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", title)
-    title = re.sub(r"\s+", " ", title).strip(" ._")
-
-    if not title:
-        title = "untitled"
-
-    return f"chapter-{index:02d}-{title}{suffix}"
+    # Nama pakai nomor saja: judul yang berubah tidak membuat file duplikat.
+    return f"chapter-{index:02d}{suffix}"
 
 
 def _build_chapter_document(
@@ -662,6 +650,7 @@ def process_chapters(
     output_suffix: str = ".epub",
     input_path: Path | None = None,
     chapter_selection: tuple[int, int] | None = None,
+    chapter_list_path: Path | None = None,
 ):
     ai_client = processor.translation_engine.client
 
@@ -681,6 +670,11 @@ def process_chapters(
     splitter = DocumentChapterSplitter()
     splitter.ai_classifier = ai_spine_classifier
     chapters = splitter.split(document)
+    if chapter_list_path is not None:
+        chapter_list_path.write_text(
+            json.dumps([{"id": c.chapter_id, "title": c.title} for c in chapters], ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     if chapter_selection is None:
         selected_start = 1
@@ -1117,7 +1111,15 @@ def show_status(input_path: Path, project_dir: Path):
         progress_path = project_dir / progress_path
 
     document = parse_document(input_path)
-    chapters = DocumentChapterSplitter().split(document)
+    list_path = project_dir / "chapters.json"
+    if list_path.exists():
+        chapters = [
+            SimpleNamespace(chapter_id=item["id"], title=item["title"])
+            for item in json.loads(list_path.read_text(encoding="utf-8"))
+        ]
+    else:
+        # shortcut: sebelum run pertama, jumlah chapter bisa beda dari run (AI classifier); sama setelah run
+        chapters = DocumentChapterSplitter().split(document)
     progress_db = ProgressDB(progress_path)
 
     print("=" * 60)
@@ -1558,6 +1560,7 @@ def main():
                     output_suffix=output_path.suffix.lower(),
                     input_path=input_path,
                     chapter_selection=chapter_selection,
+                    chapter_list_path=project_dir / "chapters.json",
                 )
             except Exception as exc:
                 if retry_round == 3:
