@@ -58,3 +58,22 @@ Do not commit API keys, `.env` files, generated translations, or runtime progres
 ## Development
 
 The project is currently under active development.
+
+## Cara instalasi
+
+```
+pip install -r requirements.txt
+```
+
+Set API key di environment:
+
+```
+export GEMINI_API_KEY="..."
+export TAVILY_API_KEY="..."   # untuk riset entitas; tanpa ini matikan dengan WN_RESEARCH_ENABLED=0
+```
+
+Jalankan tes:
+
+```
+pytest
+```

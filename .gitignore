@@ -37,3 +37,8 @@ outputs/
 # Local test/runtime data
 temp/
 .aider*
+
+# Novel asli (besar, berhak cipta) tidak ikut commit; fixture tes tetap
+input/*
+!input/test*.epub
+!input/test*.docx
