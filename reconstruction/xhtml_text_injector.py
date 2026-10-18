@@ -65,6 +65,10 @@ class XHTMLTextInjector:
 
             translated_text = paragraph_texts[paragraph_id]
 
+            # paragraf kosong di sumber (spasi/nbsp) dibiarkan agar jarak baris tetap ada
+            if not translated_text.strip() and not tag.get_text().strip():
+                continue
+
             self._replace_text_preserving_structure(
                 tag,
                 translated_text,
