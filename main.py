@@ -492,6 +492,81 @@ def _prune_chapter_epub(
             temp_path.unlink()
 
 
+def _slim_chapter_epub(epub_path: Path, title: str):
+    # Buang media yang tidak dirujuk chapter ini, dan pastikan ada daftar isi EPUB 3.
+    import posixpath
+    import re
+    from xml.sax.saxutils import escape
+    from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+
+    with ZipFile(epub_path, "r") as zin:
+        infos = zin.infolist()
+        data = {info.filename: zin.read(info.filename) for info in infos}
+
+    container = data["META-INF/container.xml"].decode("utf-8")
+    opf_path = re.search(r'full-path="([^"]+)"', container).group(1)
+    base = posixpath.dirname(opf_path)
+    opf = data[opf_path].decode("utf-8")
+
+    text = "\n".join(
+        content.decode("utf-8", "ignore")
+        for name, content in data.items()
+        if name.lower().endswith((".xhtml", ".html", ".htm", ".css"))
+    )
+
+    # shortcut: cocokkan nama file saja, aset dengan nama sama di tempat lain ikut tersimpan
+    for name in list(data):
+        if name == "mimetype" or name.startswith("META-INF/"):
+            continue
+        if name.lower().endswith((".xhtml", ".html", ".htm", ".css", ".opf", ".ncx", ".xml")):
+            continue
+        if posixpath.basename(name) in text:
+            continue
+        del data[name]
+        href = posixpath.relpath(name, base or ".")
+        opf = re.sub(r'<item\b[^>]*href="' + re.escape(href) + r'"[^>]*/>\s*', "", opf)
+        opf = re.sub(r'<meta\s+name="cover"[^>]*/>\s*', "", opf)
+
+    nav_name = posixpath.join(base, "chapter-nav.xhtml")
+    if not re.search(r'properties="[^"]*\bnav\b', opf):
+        idref = re.search(r'<itemref\b[^>]*idref="([^"]+)"', opf).group(1)
+        item = next(i for i in re.findall(r"<item\b[^>]*>", opf) if f'id="{idref}"' in i)
+        chapter_path = posixpath.normpath(
+            posixpath.join(base, re.search(r'href="([^"]+)"', item).group(1))
+        )
+        link = posixpath.relpath(chapter_path, posixpath.dirname(nav_name) or ".")
+        data[nav_name] = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">'
+            "<head><title>Navigasi</title></head><body>"
+            '<nav epub:type="toc" id="toc"><ol>'
+            f'<li><a href="{escape(link)}">{escape(title)}</a></li>'
+            "</ol></nav></body></html>"
+        ).encode("utf-8")
+        opf = opf.replace(
+            "</manifest>",
+            '<item id="chapter-nav" href="chapter-nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest>',
+            1,
+        )
+
+    data[opf_path] = opf.encode("utf-8")
+    temp_path = epub_path.with_suffix(".slim.epub")
+    names = [info.filename for info in infos if info.filename in data]
+    names += [name for name in data if name not in names]
+
+    try:
+        with ZipFile(temp_path, "w") as zout:
+            for name in names:
+                if name == "mimetype":
+                    zout.writestr(name, data[name], compress_type=ZIP_STORED)
+                else:
+                    zout.writestr(name, data[name], compress_type=ZIP_DEFLATED)
+        temp_path.replace(epub_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
 def export_chapter(
     input_path: Path,
     source_document,
@@ -533,6 +608,10 @@ def export_chapter(
             _prune_chapter_epub(
                 temp_output,
                 chapter_document,
+            )
+            _slim_chapter_epub(
+                temp_output,
+                getattr(chapter, "translated_title", None) or chapter.title,
             )
 
         validate_output(
