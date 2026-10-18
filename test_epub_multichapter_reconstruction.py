@@ -139,7 +139,7 @@ print("\n=== RELOAD OUTPUT ===")
 
 reloaded = parse_epub(OUTPUT)
 
-assert reloaded.title == source.title
+assert reloaded.title == f"(ID) {source.title}"
 assert reloaded.author == source.author
 
 assert [

@@ -118,7 +118,7 @@ def test_metadata_roundtrip():
         get_metadata(rebuilt)
     )
 
-    assert original.title == rebuilt.title
+    assert rebuilt.title == f"(ID) {original.title}"
     assert original.author == rebuilt.author
 
     assert (
@@ -139,10 +139,15 @@ def test_metadata_roundtrip():
         assert field in original_dc
         assert field in rebuilt_dc
 
-        assert (
-            original_dc[field]["text"]
-            == rebuilt_dc[field]["text"]
-        )
+        if field == "identifier":
+            assert rebuilt_dc[field]["text"].startswith("urn:uuid:")
+        else:
+            expected = (
+                f"(ID) {original_dc[field]['text']}"
+                if field == "title"
+                else original_dc[field]["text"]
+            )
+            assert expected == rebuilt_dc[field]["text"]
 
         assert (
             original_dc[field]["attributes"]

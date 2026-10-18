@@ -1,5 +1,5 @@
 import re
-import re
+import uuid
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import unquote
@@ -94,7 +94,7 @@ def _build_xhtml(
 """
 
 
-def _build_content_opf(document, structure):
+def _build_content_opf(document, structure, build_id="", label=""):
     package_metadata = structure.get(
         "package_metadata",
         {},
@@ -138,6 +138,10 @@ def _build_content_opf(document, structure):
         for entry in dc_entries:
             name = entry["name"]
             text = entry.get("text", "")
+            if name == "title" and label:
+                text = f"({label}) {text}"
+            if name == "identifier" and build_id:
+                text = f"urn:uuid:{build_id}"
             attributes = entry.get(
                 "attributes",
                 {},
@@ -895,9 +899,12 @@ def reconstruct_epub(
             ncx_path
         )
 
+    match = re.search(r"_v(\d+)$", output_path.stem)
     content_opf = _build_content_opf(
         document,
         structure,
+        build_id=uuid.uuid4(),
+        label=f"IDtest{match.group(1)}" if match else "ID",
     )
 
     container_xml = _build_container_xml(
