@@ -1035,7 +1035,7 @@ def process_chapters(
 
         if (
             export_chapters
-            and not restore_only
+            and (index - 1) in selected_indexes
             and chapter_output_dir is not None
             and input_path is not None
         ):
