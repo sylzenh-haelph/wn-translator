@@ -182,21 +182,21 @@ def _check_untranslated_english(translation, issues):
         return
 
     for index, paragraph in enumerate(translation.split("\n")):
-        words = re.findall(r"[A-Za-z']+", paragraph.lower())
-        if len(words) < 4:
-            continue
-
-        english = sum(word in UNTRANSLATED_WORDS for word in words)
-        if english / len(words) >= 0.25:
-            issues.append(
-                QAIssue(
-                    rule="untranslated_english",
-                    message=(
-                        f"Paragraph output ke-{index + 1} "
-                        f"masih berbahasa Inggris."
-                    ),
+        for sentence in re.split(r"[.!?]+", paragraph):
+            words = re.findall(r"[A-Za-z']+", sentence.lower())
+            if len(words) < 4:
+                continue
+            if sum(word in UNTRANSLATED_WORDS for word in words) >= 2:
+                issues.append(
+                    QAIssue(
+                        rule="untranslated_english",
+                        message=(
+                            f"Paragraph output ke-{index + 1} "
+                            f"masih berbahasa Inggris."
+                        ),
+                    )
                 )
-            )
+                break
 
 
 def _check_source_echo(translation, issues):
