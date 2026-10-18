@@ -9,7 +9,7 @@ sys.path.insert(
 )
 
 from models.document import Document, Paragraph, TextRun
-from reconstruction.epub_reconstructor import LINE_BREAK, _strip_chapter_prefix, reconstruct_epub
+from reconstruction.epub_reconstructor import LINE_BREAK, _mark_indonesian, _strip_chapter_prefix, reconstruct_epub
 
 
 def _make_epub(tmp_path):
@@ -77,3 +77,8 @@ def test_each_build_gets_new_identifier_and_label_from_file_name(tmp_path):
     assert "(ID) T" in opfs[2]
     ids = [re.search(r"urn:uuid:[0-9a-f-]{36}", opf).group(0) for opf in opfs]
     assert len(set(ids)) == 3
+
+
+def test_mark_indonesian_replaces_english_lang():
+    marked = _mark_indonesian('<html lang="en" xml:lang="en"><p lang="en-US">x</p></html>')
+    assert marked == '<html lang="id" xml:lang="id"><p lang="id">x</p></html>'

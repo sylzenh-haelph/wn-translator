@@ -572,6 +572,10 @@ def _strip_chapter_prefix(text):
     return match.group(1).strip() + LINE_BREAK + text[match.end():]
 
 
+def _mark_indonesian(html):
+    return re.sub(r'(lang|xml:lang)="en[^"]*"', r'\1="id"', html)
+
+
 def _inject_translated_xhtml(
     document,
     structure,
@@ -614,8 +618,8 @@ def _inject_translated_xhtml(
         paragraph_texts,
         title_text=title_text,
     )
-    # shortcut: <br/> hanya untuk halaman dengan XHTML sumber, halaman tanpa sumber masih satu baris
-    return html.replace(LINE_BREAK, "<br/>")
+    # shortcut: lang="en" di halaman terjemahan diganti "id", span Inggris ikut berubah, naikkan jika muncul
+    return _mark_indonesian(html).replace(LINE_BREAK, "<br/>")
 
 
 def _update_ncx_source(
