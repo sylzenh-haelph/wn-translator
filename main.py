@@ -882,7 +882,7 @@ def process_chapters(
                 export_chapter(
                     input_path=input_path,
                     source_document=document,
-                    chapter=chapter,
+                    chapter=reconstructed_chapter,
                     index=index,
                     output_dir=chapter_output_dir,
                     suffix=output_suffix,
@@ -1121,7 +1121,7 @@ def process_chapters(
             export_chapter(
                 input_path=input_path,
                 source_document=document,
-                chapter=chapter,
+                chapter=reconstructed_chapter,
                 index=index,
                 output_dir=chapter_output_dir,
                 suffix=output_suffix,
