@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui.server import read_chapters, safe_input, safe_project, start_job
+from ui.server import project_for, read_chapters, safe_input, start_job
 
 
 def test_read_chapters_reads_progress(tmp_path):
@@ -26,8 +26,11 @@ def test_read_chapters_reads_progress(tmp_path):
 
 def test_paths_from_browser_are_checked():
     with pytest.raises(ValueError):
-        safe_project("../x")
-    with pytest.raises(ValueError):
         safe_input("input/../secret.epub")
     with pytest.raises(ValueError):
-        start_job(Path("input/a.epub"), Path("temp/p"), 5, 2)
+        start_job(Path("input/a.epub"), 5, 2)
+
+
+def test_project_follows_novel_name():
+    assert project_for(Path("input/mt_v15.epub")) == Path("temp/mt_project")
+    assert project_for(Path("input/RZxMT_Chapter_1.epub")) == Path("temp/RZxMT_Chapter_1_project")
