@@ -655,6 +655,26 @@ def export_chapter(
         )
 
 
+def parse_chapter_list(value: str) -> set[int]:
+    """Parse '3', '2-5', atau daftar '2,5,7-8' menjadi kumpulan nomor chapter."""
+    numbers = set()
+    for part in value.split(","):
+        part = part.strip()
+        if "-" in part:
+            start, end = part.split("-", 1)
+            if not (start.strip().isdigit() and end.strip().isdigit()):
+                raise ValueError("Format --chapter harus N, START-END, atau daftar dengan koma.")
+            low, high = int(start), int(end)
+            if low <= 0 or high < low:
+                raise ValueError("Range chapter tidak valid.")
+            numbers.update(range(low, high + 1))
+        elif part.isdigit() and int(part) > 0:
+            numbers.add(int(part))
+        else:
+            raise ValueError("Format --chapter harus N, START-END, atau daftar dengan koma.")
+    return numbers
+
+
 def parse_chapter_selection(value: str) -> tuple[int, int]:
     """Parse --chapter N or --chapter START-END into a 1-based range."""
     raw = value.strip()
@@ -758,26 +778,19 @@ def process_chapters(
         )
 
     if chapter_selection is None:
-        selected_start = 1
-        selected_end = len(chapters)
+        numbers = set(range(1, len(chapters) + 1))
+    elif isinstance(chapter_selection, tuple):
+        numbers = set(range(chapter_selection[0], chapter_selection[1] + 1))
     else:
-        selected_start, selected_end = chapter_selection
+        numbers = set(chapter_selection)
 
-        if selected_start > len(chapters):
-            raise ValueError(
-                f"Chapter {selected_start} tidak tersedia. "
-                f"Total chapter: {len(chapters)}."
-            )
+    if numbers and max(numbers) > len(chapters):
+        raise ValueError(
+            f"Chapter {max(numbers)} tidak tersedia. "
+            f"Total chapter: {len(chapters)}."
+        )
 
-        if selected_end > len(chapters):
-            raise ValueError(
-                f"Chapter {selected_end} tidak tersedia. "
-                f"Total chapter: {len(chapters)}."
-            )
-
-    selected_indexes = set(
-        range(selected_start - 1, selected_end)
-    )
+    selected_indexes = {number - 1 for number in numbers}
 
     assembler = ChapterTranslationAssembler()
     reconstructor = ChapterReconstructor()
@@ -1330,7 +1343,7 @@ def build_parser():
     parser.add_argument(
         "--chapter",
         default=None,
-        help="Terjemahkan chapter tertentu (N) atau range (START-END)",
+        help="Terjemahkan chapter tertentu: N, START-END, atau daftar dengan koma (2,4,6-8)",
     )
 
     parser.add_argument(
@@ -1680,21 +1693,11 @@ def main():
         chapter_selection = None
 
         if args.chapter is not None:
-            chapter_selection = parse_chapter_selection(
-                args.chapter
-            )
+            chapter_selection = parse_chapter_list(args.chapter)
+            listed = ",".join(str(n) for n in sorted(chapter_selection))
 
-            print(
-                f"Chapter selection: "
-                f"{chapter_selection[0]}-"
-                f"{chapter_selection[1]}"
-            )
-
-            logger.info(
-                f"Chapter selection: "
-                f"{chapter_selection[0]}-"
-                f"{chapter_selection[1]}"
-            )
+            print(f"Chapter selection: {listed}")
+            logger.info(f"Chapter selection: {listed}")
 
         for retry_round in range(1, 4):
             try:

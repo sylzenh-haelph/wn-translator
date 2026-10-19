@@ -54,20 +54,23 @@ def job_running():
     return subprocess.run(["tmux", "has-session", "-t", JOB], capture_output=True).returncode == 0
 
 
-def start_job(input_path, start, end):
+def start_job(input_path, numbers):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
-    if not 1 <= start <= end:
-        raise ValueError("rentang chapter tidak valid")
+    if numbers is not None and (not numbers or min(numbers) < 1):
+        raise ValueError("pilih minimal satu chapter")
     if job_running():
         raise RuntimeError("masih ada proses yang berjalan")
     project = project_for(input_path)
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     out = f"temp/{input_path.stem}_ui_{stamp}.epub"
+    chapter_dir = f"temp/{input_path.stem}_chapters"
+    only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
     cmd = (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
         f"python -u main.py {quote(str(input_path))} -o {quote(out)} "
-        f"--project-dir {quote(str(project))} --chapter {start}-{end} "
+        f"--project-dir {quote(str(project))} --export-chapters "
+        f"--chapter-output-dir {quote(chapter_dir)}{only} "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; echo SELESAI; sleep 3600"
     )
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
@@ -89,29 +92,43 @@ def files():
         if folder.exists():
             for f in sorted(folder.glob("*.epub")):
                 found[f"{folder.name}/{f.name}"] = f
+    for folder in sorted((ROOT / "temp").glob("*_chapters")):
+        for f in sorted(folder.glob("*.epub")):
+            found[f"temp/{folder.name}/{f.name}"] = f
     return found
 
 
 def page(selected="", message=""):
     novels = sorted((ROOT / "input").glob("*.epub"))
     current = next((p for p in novels if f"input/{p.name}" == selected), novels[0] if novels else None)
-    options = []
-    for p in novels:
-        mark = " selected" if p == current else ""
-        options.append(f'<option value="input/{html.escape(p.name)}"{mark}>{html.escape(p.name)}</option>')
+    options = "".join(
+        f'<option value="input/{html.escape(p.name)}"{" selected" if p == current else ""}>'
+        f"{html.escape(p.name)}</option>"
+        for p in novels
+    )
     rows = read_chapters(project_for(current)) if current else []
     running = job_running()
+    exports = files()
     table = ""
     for r in rows:
+        number = int(r["id"].split("_")[1])
+        rid = html.escape(r["id"])
+        checked = "" if r["status"] == "completed" else " checked"
+        key = f"temp/{current.stem}_chapters/chapter-{number:02d}.epub"
+        if r["status"] != "completed":
+            file_cell = ""
+        elif key in exports:
+            file_cell = f'<a href="/file/{url_quote(key)}">unduh</a>'
+        else:
+            file_cell = "belum diekspor"
         label = "berjalan" if running and r["status"] == "in_progress" else STATUS_TEXT.get(r["status"], r["status"])
         table += (
-            f"<tr><td>{html.escape(r['id'])}</td><td>{html.escape(r['title'])}</td>"
-            f"<td>{label}</td><td>{r['done']}/{r['total']}</td></tr>"
+            f'<tr><td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
+            f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
+            f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
         )
-    links = "".join(
-        f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>'
-        for key in files()
-    )
+    notice = "" if rows else "<p>Belum ada daftar chapter. Tekan Mulai untuk memproses semua chapter yang terdeteksi.</p>"
+    listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -120,24 +137,23 @@ def page(selected="", message=""):
 <style>body{{font-family:sans-serif;font-size:17px;margin:12px}}
 table{{border-collapse:collapse;width:100%}}td,th{{border-bottom:1px solid #ccc;padding:4px;text-align:left}}
 pre{{white-space:pre-wrap;font-size:13px;background:#f4f4f4;padding:8px}}
-input,select{{font-size:17px;margin:4px 0;width:100%}}button{{font-size:17px;padding:8px 16px;margin:6px 0}}</style>
+select{{font-size:17px;margin:4px 0;width:100%}}button{{font-size:17px;padding:8px 16px;margin:6px 0}}</style>
 </head><body>
 <h2>WN Translator</h2>
 <p>Status proses: <b>{"berjalan" if running else "berhenti"}</b></p>
 <p>{html.escape(message)}</p>
 <form method="post" action="/start">
-<label>Novel</label><select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{"".join(options)}</select>
-<label>Chapter dari</label><input name="start" type="number" value="2" min="1">
-<label>sampai</label><input name="end" type="number" value="15" min="1">
+<label>Novel</label>
+<select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{options}</select>
+{notice}
+<table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 <button type="submit">Mulai</button>
 </form>
 <form method="post" action="/stop"><button type="submit">Berhenti</button></form>
-<h3>Chapter</h3>
-<table><tr><th>ID</th><th>Judul</th><th>Status</th><th>Chunk</th></tr>{table}</table>
 <h3>Log terbaru</h3>
 <pre>{html.escape(tail(JOB_LOG))}</pre>
 <h3>File hasil</h3>
-<ul>{links}</ul>
+<ul>{listing}</ul>
 </body></html>"""
 
 
@@ -186,7 +202,10 @@ class Handler(BaseHTTPRequestHandler):
         selected = form.get("input", [""])[0]
         try:
             if self.path == "/start":
-                start_job(safe_input(selected), int(form["start"][0]), int(form["end"][0]))
+                input_path = safe_input(selected)
+                rows = read_chapters(project_for(input_path))
+                numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
+                start_job(input_path, numbers)
                 msg = "Proses dimulai."
             elif self.path == "/stop":
                 stop_job()

@@ -28,7 +28,9 @@ def test_paths_from_browser_are_checked():
     with pytest.raises(ValueError):
         safe_input("input/../secret.epub")
     with pytest.raises(ValueError):
-        start_job(Path("input/a.epub"), 5, 2)
+        start_job(Path("input/a.epub"), set())
+    with pytest.raises(ValueError):
+        start_job(Path("input/a.epub"), {0})
 
 
 def test_project_follows_novel_name():
