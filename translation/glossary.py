@@ -34,3 +34,29 @@ def apply_glossary(text, pairs):
         re.IGNORECASE,
     )
     return pattern.sub(lambda m: table[m.group(1).lower()], text)
+
+
+def write_scan_glossary(entries, path, title):
+    # Kanan kosong = belum diterjemahkan, jadi tidak diterapkan sampai diisi.
+    seen = {}
+    for name, kind in entries:
+        clean = name.strip()
+        if clean and clean.lower() not in seen:
+            seen[clean.lower()] = (clean, kind or "lainnya")
+
+    by_kind = {}
+    for clean, kind in seen.values():
+        by_kind.setdefault(kind, []).append(clean)
+
+    lines = [
+        f"# Glosarium: {title}",
+        "# Isi bagian kanan (Indonesia). Kosong = belum diterjemahkan, tidak diterapkan.",
+        "",
+    ]
+    for kind in sorted(by_kind):
+        lines.append(f"## {kind}")
+        lines.extend(f"{name} = " for name in sorted(by_kind[kind], key=str.lower))
+        lines.append("")
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n".join(lines), encoding="utf-8")

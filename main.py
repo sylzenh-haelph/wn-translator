@@ -26,7 +26,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.glossary import apply_glossary, load_glossary
+from translation.glossary import apply_glossary, load_glossary, write_scan_glossary
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -1256,6 +1256,50 @@ def show_status(input_path: Path, project_dir: Path):
     print(f"Total       : {len(chapters)}")
 
 
+def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
+    if output.exists():
+        raise SystemExit(f"Glosarium sudah ada: {output}. Pilih nama lain agar isi tidak tertimpa.")
+
+    config = load_config(project_dir=project_dir)
+    if not config.research_enabled:
+        raise SystemExit("Scan glosarium butuh riset aktif (WN_RESEARCH_ENABLED=1).")
+
+    document = parse_document(input_path)
+    research_client = build_failover_client(
+        config,
+        role="Research",
+        primary_provider=config.research_provider,
+        primary_model=config.research_model,
+        fallbacks=config.research_fallbacks,
+        max_retries=config.research_max_retries,
+        timeout=config.research_timeout,
+    )
+    entity_service = build_research_service(
+        project_dir=project_dir,
+        client=research_client,
+        document_title=document.title,
+        author=document.author,
+        research_timeout=config.research_timeout,
+        research_max_retries=config.research_max_retries,
+        max_attempts=config.research_max_attempts,
+    )
+
+    found = []
+    # shortcut: semua bagian ikut diriset, termasuk halaman non-cerita; penyaringan menyusul
+    for chapter in DocumentChapterSplitter().split(document):
+        if not chapter.paragraphs:
+            continue
+        print(f"Riset: {chapter.chapter_id} | {chapter.title}")
+        result = entity_service.process_chapter(
+            chapter_id=chapter.chapter_id,
+            paragraphs=chapter.paragraphs,
+        )
+        found.extend((entity.text, entity.entity_type) for entity in result.entities)
+
+    write_scan_glossary(found, output, document.title)
+    print(f"Glosarium scan: {output}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description="WN Translator"
@@ -1345,6 +1389,12 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--scan-glossary",
+        default=None,
+        help="Scan entitas novel ini ke file glosarium baru (tanpa menerjemahkan)",
+    )
+
+    parser.add_argument(
         "--glossary",
         default="glossary/mt_v15.txt",
         help="File glosarium yang diterapkan otomatis ke hasil",
@@ -1381,6 +1431,14 @@ def main():
             print(f"ERROR: {exc}")
             raise SystemExit(1)
 
+        return
+
+    if args.scan_glossary:
+        scan_glossary_file(
+            input_path,
+            project_dir,
+            Path(args.scan_glossary),
+        )
         return
 
     if output_path is None:

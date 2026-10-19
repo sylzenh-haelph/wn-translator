@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from translation.glossary import apply_glossary, load_glossary
+from translation.glossary import apply_glossary, load_glossary, write_scan_glossary
 
 
 def test_longest_match_and_word_boundary():
@@ -26,3 +26,12 @@ def test_load_skips_comments_and_blank_lines(tmp_path):
     file = tmp_path / "g.txt"
     file.write_text("# komentar\n\n## Bagian\nDragon God = Dewa Naga\n# Earth = Tanah\n", encoding="utf-8")
     assert load_glossary(file) == [("Dragon God", "Dewa Naga")]
+
+
+def test_scan_glossary_is_editable(tmp_path):
+    out = tmp_path / "g.txt"
+    write_scan_glossary([("Eris", "character"), ("eris", "character"), ("Dragon God", "title")], out, "Novel")
+    text = out.read_text(encoding="utf-8")
+    assert text.count("Eris = ") == 1
+    assert "## title" in text
+    assert load_glossary(out) == []
