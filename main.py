@@ -26,6 +26,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
+from translation.glossary import apply_glossary, load_glossary
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -730,6 +731,7 @@ def process_chapters(
     input_path: Path | None = None,
     chapter_selection: tuple[int, int] | None = None,
     chapter_list_path: Path | None = None,
+    glossary: list | None = None,
 ):
     ai_client = processor.translation_engine.client
 
@@ -1098,6 +1100,12 @@ def process_chapters(
             for paragraph in chapter.paragraphs
         ]
 
+        translated_paragraphs = [
+            apply_glossary(text, glossary or [])
+            for text in translated_paragraphs
+        ]
+        bilingual_title = apply_glossary(bilingual_title, glossary or [])
+
         reconstructed_chapter = reconstructor.reconstruct(
             chapter_id=chapter.chapter_id,
             title=bilingual_title,
@@ -1334,6 +1342,12 @@ def build_parser():
         type=int,
         default=None,
         help="Override retry QA",
+    )
+
+    parser.add_argument(
+        "--glossary",
+        default="glossary/mt_v15.txt",
+        help="File glosarium yang diterapkan otomatis ke hasil",
     )
 
     parser.add_argument(
@@ -1640,6 +1654,7 @@ def main():
                     input_path=input_path,
                     chapter_selection=chapter_selection,
                     chapter_list_path=project_dir / "chapters.json",
+                    glossary=load_glossary(Path(args.glossary)),
                 )
             except Exception as exc:
                 if retry_round == 3:
