@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from translation.glossary import apply_glossary, load_glossary, write_scan_glossary
+from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary
 
 
 def test_longest_match_and_word_boundary():
@@ -28,10 +28,19 @@ def test_load_skips_comments_and_blank_lines(tmp_path):
     assert load_glossary(file) == [("Dragon God", "Dewa Naga")]
 
 
-def test_scan_glossary_is_editable(tmp_path):
+def test_merge_scan_keeps_existing_values_and_adds_new(tmp_path):
     out = tmp_path / "g.txt"
-    write_scan_glossary([("Eris", "character"), ("eris", "character"), ("Dragon God", "title")], out, "Novel")
+    out.write_text("# hdr\n## character\nEris = Eris Keren\n\n## title\n", encoding="utf-8")
+    added = merge_scan_glossary(
+        [("eris", "character"), ("Rudeus", "character"), ("Dragon God", "title"), ("Excalibur", "item")],
+        out,
+        "Novel",
+    )
     text = out.read_text(encoding="utf-8")
-    assert text.count("Eris = ") == 1
-    assert "## title" in text
-    assert load_glossary(out) == []
+    assert added == 3
+    assert "Eris = Eris Keren" in text
+    assert text.lower().count("eris =") == 1
+    assert "Rudeus = " in text
+    assert "Dragon God = " in text
+    assert "## item" in text
+    assert "Excalibur = " in text

@@ -26,7 +26,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.glossary import apply_glossary, load_glossary, write_scan_glossary
+from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -1257,8 +1257,6 @@ def show_status(input_path: Path, project_dir: Path):
 
 
 def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
-    if output.exists():
-        raise SystemExit(f"Glosarium sudah ada: {output}. Pilih nama lain agar isi tidak tertimpa.")
 
     config = load_config(project_dir=project_dir)
     if not config.research_enabled:
@@ -1296,8 +1294,8 @@ def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
         )
         found.extend((entity.text, entity.entity_type) for entity in result.entities)
 
-    write_scan_glossary(found, output, document.title)
-    print(f"Glosarium scan: {output}")
+    added = merge_scan_glossary(found, output, document.title)
+    print(f"Glosarium: {output} | entri baru: {added}")
 
 
 def build_parser():

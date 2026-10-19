@@ -36,27 +36,54 @@ def apply_glossary(text, pairs):
     return pattern.sub(lambda m: table[m.group(1).lower()], text)
 
 
-def write_scan_glossary(entries, path, title):
-    # Kanan kosong = belum diterjemahkan, jadi tidak diterapkan sampai diisi.
-    seen = {}
-    for name, kind in entries:
-        clean = name.strip()
-        if clean and clean.lower() not in seen:
-            seen[clean.lower()] = (clean, kind or "lainnya")
+def merge_scan_glossary(entries, path, title):
+    # Tambah entri baru saja. Yang sudah ada (termasuk isian Indonesia dan komentar) tidak diubah.
+    path = Path(path)
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = [
+            f"# Glosarium: {title}",
+            "# Isi bagian kanan (Indonesia). Kosong = belum diterjemahkan, tidak diterapkan.",
+            "",
+        ]
+
+    known = set()
+    for line in lines:
+        text = line.strip()
+        if text and not text.startswith("#") and "=" in text:
+            known.add(text.split("=", 1)[0].strip().lower())
 
     by_kind = {}
-    for clean, kind in seen.values():
-        by_kind.setdefault(kind, []).append(clean)
+    for name, kind in entries:
+        clean = name.strip()
+        if clean and clean.lower() not in known:
+            known.add(clean.lower())
+            by_kind.setdefault(kind or "lainnya", []).append(clean)
 
-    lines = [
-        f"# Glosarium: {title}",
-        "# Isi bagian kanan (Indonesia). Kosong = belum diterjemahkan, tidak diterapkan.",
-        "",
-    ]
+    section_end = {}
+    current = None
+    for i, line in enumerate(lines):
+        text = line.strip()
+        if text.startswith("## "):
+            current = text[3:].strip()
+            section_end[current] = i + 1
+        elif current and text and not text.startswith("#") and "=" in text:
+            section_end[current] = i + 1
+
+    tail = []
+    inserts = []
     for kind in sorted(by_kind):
-        lines.append(f"## {kind}")
-        lines.extend(f"{name} = " for name in sorted(by_kind[kind], key=str.lower))
-        lines.append("")
+        new_lines = [f"{name} = " for name in sorted(by_kind[kind], key=str.lower)]
+        if kind in section_end:
+            inserts.append((section_end[kind], new_lines))
+        else:
+            tail += ["", f"## {kind}"] + new_lines
 
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text("\n".join(lines), encoding="utf-8")
+    for pos, new_lines in sorted(inserts, key=lambda item: item[0], reverse=True):
+        lines[pos:pos] = new_lines
+    lines += tail
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return sum(len(v) for v in by_kind.values())
