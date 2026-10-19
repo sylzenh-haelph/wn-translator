@@ -239,6 +239,7 @@ def _validate_opf(archive, opf_path, issues):
             manifest_items[item_id] = {
                 "href": href,
                 "media_type": media_type,
+                "properties": element.attrib.get("properties", ""),
             }
 
         elif local == "itemref":
@@ -351,6 +352,53 @@ def _validate_xhtml_documents(
             )
 
 
+def _validate_navigation(archive, opf_path, opf_info, issues):
+    # shortcut: hanya EPUB 3 yang diperiksa, NCX pada EPUB 2 belum
+    if not opf_info["root"].attrib.get("version", "").startswith("3"):
+        return
+
+    nav_items = [
+        item
+        for item in opf_info["manifest"].values()
+        if "nav" in (item.get("properties") or "").split()
+    ]
+
+    if not nav_items:
+        _add_error(
+            issues,
+            "NAV_EXISTS",
+            "EPUB 3 tidak memiliki dokumen navigasi (properties=nav).",
+        )
+        return
+
+    nav_path = _resolve_path(opf_path, nav_items[0]["href"])
+
+    if nav_path not in set(archive.namelist()):
+        _add_error(
+            issues,
+            "NAV_FILE",
+            f"Dokumen navigasi tidak ditemukan: {nav_path}",
+        )
+        return
+
+    try:
+        nav_root = ET.fromstring(archive.read(nav_path))
+    except (ET.ParseError, UnicodeDecodeError) as exc:
+        _add_error(
+            issues,
+            "NAV_XML",
+            f"Dokumen navigasi tidak valid ({nav_path}): {exc}",
+        )
+        return
+
+    if not any(_local_name(el.tag) == "nav" for el in nav_root.iter()):
+        _add_error(
+            issues,
+            "NAV_ELEMENT",
+            f"Dokumen navigasi tidak punya elemen <nav> ({nav_path}).",
+        )
+
+
 def validate_epub(path) -> EPUBValidationResult:
     path = Path(path)
     issues: list[ValidationIssue] = []
@@ -410,6 +458,12 @@ def validate_epub(path) -> EPUBValidationResult:
             )
 
             if opf_info is not None:
+                _validate_navigation(
+                    archive,
+                    opf_path,
+                    opf_info,
+                    issues,
+                )
                 _validate_xhtml_documents(
                     archive,
                     opf_path,
