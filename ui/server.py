@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, quote as url_quote, unquote, urlparse
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ui.glossary_page import glossary_page, save_glossary  # noqa: E402
+from ui.glossary_page import STYLE, glossary_page, save_glossary  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -201,7 +201,7 @@ def page(selected="", choice="", message="", fmt="epub"):
         elif have:
             file_cell = " ".join(f'<a href="/file/{url_quote(have[f])}">unduh {f}</a>' for f in have)
             if fmt not in have:
-                file_cell += f"<br><i>belum ada {fmt}</i>"
+                file_cell += f"<br><i class='muted'>belum ada {fmt}</i>"
         else:
             file_cell = "belum diekspor"
         label = "berjalan" if running and r["status"] == "in_progress" else STATUS_TEXT.get(r["status"], r["status"])
@@ -210,50 +210,65 @@ def page(selected="", choice="", message="", fmt="epub"):
             f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
             f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
         )
-    notice = "" if rows else "<p>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
+    notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
     listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
     format_js = f"location.href='/?input={input_param}&g={url_quote(choice)}&f='+this.value"
     format_radios = "".join(
         f'<label><input type="radio" name="fmt" value="{f}"'
-        f'{" checked" if f == fmt else ""} onchange="{format_js}"> {f.upper()}</label> '
+        f'{" checked" if f == fmt else ""} onchange="{format_js}"> {f.upper()}</label>'
         for f in FORMATS
     )
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="10">
-<title>WN Translator</title>
-<style>body{{font-family:sans-serif;font-size:17px;margin:12px}}
-table{{border-collapse:collapse;width:100%}}td,th{{border-bottom:1px solid #ccc;padding:4px;text-align:left}}
-pre{{white-space:pre-wrap;font-size:13px;background:#f4f4f4;padding:8px}}
-select,input[type=text]{{font-size:17px;margin:4px 0;width:100%}}button{{font-size:17px;padding:8px 16px;margin:6px 0}}</style>
-</head><body>
-<h2>WN Translator</h2>
-<p>Status proses: <b>{"berjalan" if running else "berhenti"}</b></p>
-<p>{html.escape(message)}</p>
-<form method="post" action="/start">
+    state = "berjalan" if running else "berhenti"
+    state_class = "run" if running else "idle"
+    refresh = '<meta http-equiv="refresh" content="10">' if running else ""
+    status_block = (
+        f"<section><p>Status proses: <span class='{state_class}'>{state}</span></p>"
+        f"<p class='muted'>{html.escape(message)}</p>"
+        '<form method="post" action="/stop"><button type="submit">Berhenti</button></form></section>'
+    )
+    files_block = (
+        "<section><h3>File hasil</h3>"
+        + (f"<ul>{listing}</ul>" if listing else "<p class='muted'>Belum ada file hasil.</p>")
+        + "</section>"
+    )
+    form_block = f"""<form method="post" action="/start">
+<section>
+<h3>Mulai proses</h3>
 <label>Novel</label>
 <select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{novel_options}</select>
-<p>Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
-<label>Mode</label><br>
-<label><input type="radio" name="mode" value="translate" checked> Terjemahkan</label><br>
-<label><input type="radio" name="mode" value="export"> Ekspor chapter selesai (tanpa menerjemahkan)</label><br>
+<p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
+<label>Mode</label>
+<div class="opt">
+<label><input type="radio" name="mode" value="translate" checked> Terjemahkan</label>
+<label><input type="radio" name="mode" value="export"> Ekspor chapter selesai (tanpa menerjemahkan)</label>
 <label><input type="radio" name="mode" value="scan"> Scan glosarium saja</label>
-<label>Format hasil</label><br>
-{format_radios}
+</div>
+<label>Format hasil</label>
+<div class="opt">{format_radios}</div>
 <label>Glosarium</label>
 <select name="glossary" onchange="location.href='/?input={input_param}&f={fmt}&g='+encodeURIComponent(this.value)">{options}</select>
 <input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru">
 {editor}
+</section>
+<section>
+<h3>Chapter</h3>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 <button type="submit">Mulai</button>
-</form>
-<form method="post" action="/stop"><button type="submit">Berhenti</button></form>
-<h3>Log terbaru</h3>
-<pre>{html.escape(tail(JOB_LOG))}</pre>
-<h3>File hasil</h3>
-<ul>{listing}</ul>
+</section>
+</form>"""
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{refresh}
+<title>WN Translator</title>
+<style>{STYLE}</style>
+</head><body>
+<h1>WN Translator</h1>
+{status_block}
+{files_block}
+{form_block}
+<details><summary>Log terbaru</summary><pre>{html.escape(tail(JOB_LOG))}</pre></details>
 </body></html>"""
 
 
