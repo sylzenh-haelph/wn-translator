@@ -101,9 +101,10 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp):
         out = quote(f"temp/{input_path.stem}_ui_{stamp}.{fmt}")
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
+        export_only = " --export-only" if mode == "export" else ""
         args = (
             f"-o {out} --project-dir {project} --export-chapters "
-            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}"
+            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
@@ -116,6 +117,8 @@ def start_job(input_path, numbers, fmt, glossary_name, mode):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
+    if mode == "export" and not numbers:
+        raise ValueError("pilih chapter yang mau diekspor")
     if mode == "translate" and numbers is not None and (not numbers or min(numbers) < 1):
         raise ValueError("pilih minimal satu chapter")
     if job_running():
@@ -222,6 +225,7 @@ select,input[type=text]{{font-size:17px;margin:4px 0;width:100%}}button{{font-si
 <p>Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label><br>
 <label><input type="radio" name="mode" value="translate" checked> Terjemahkan</label><br>
+<label><input type="radio" name="mode" value="export"> Ekspor chapter selesai (tanpa menerjemahkan)</label><br>
 <label><input type="radio" name="mode" value="scan"> Scan glosarium saja</label>
 <label>Format hasil</label><br>
 <label><input type="radio" name="fmt" value="epub" checked> EPUB</label>
@@ -296,11 +300,10 @@ class Handler(BaseHTTPRequestHandler):
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 mode = form.get("mode", ["translate"])[0]
                 fmt = form.get("fmt", ["epub"])[0]
-                numbers = None
-                if mode == "translate":
-                    rows = read_chapters(project_for(input_path))
-                    if rows:
-                        numbers = {int(i.split("_")[1]) for i in form.get("ch", [])}
+                if mode not in ("translate", "export", "scan"):
+                    raise ValueError("mode tidak dikenal")
+                rows = read_chapters(project_for(input_path))
+                numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 start_job(input_path, numbers, fmt, glossary_name, mode)
                 choice = glossary_name
                 msg = "Proses dimulai."

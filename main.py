@@ -745,9 +745,11 @@ def parse_chapter_selection(value: str) -> tuple[int, int]:
     return number, number
 
 
-def chapter_action(selected: bool, processor, chapter_id: str) -> str:
+def chapter_action(selected: bool, processor, chapter_id: str, export_only: bool = False) -> str:
     """Chapter yang sudah selesai dipulihkan tanpa riset ulang."""
     status = processor.progress_db.load(chapter_id)["status"]
+    if export_only:
+        return "restore" if selected and status == "completed" else "skip"
     if status == "completed":
         return "restore"
     return "translate" if selected else "skip"
@@ -766,6 +768,7 @@ def process_chapters(
     chapter_selection: tuple[int, int] | None = None,
     chapter_list_path: Path | None = None,
     glossary: list | None = None,
+    export_only: bool = False,
 ):
     ai_client = processor.translation_engine.client
 
@@ -833,6 +836,7 @@ def process_chapters(
             (index - 1) in selected_indexes,
             processor,
             chapter.chapter_id,
+            export_only=export_only,
         )
         if action == "skip":
             if logger:
@@ -1414,6 +1418,12 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--export-only",
+        action="store_true",
+        help="Hanya ekspor chapter yang sudah selesai (tanpa menerjemahkan)",
+    )
+
+    parser.add_argument(
         "--scan-glossary",
         default=None,
         help="Scan entitas novel ini ke file glosarium baru (tanpa menerjemahkan)",
@@ -1728,6 +1738,7 @@ def main():
                     chapter_selection=chapter_selection,
                     chapter_list_path=project_dir / "chapters.json",
                     glossary=load_glossary(Path(args.glossary)),
+                    export_only=args.export_only,
                 )
             except Exception as exc:
                 if retry_round == 3:
