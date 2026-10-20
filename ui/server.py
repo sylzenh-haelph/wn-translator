@@ -8,6 +8,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from shlex import quote
 from urllib.parse import parse_qs, quote as url_quote, unquote, urlparse
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from ui.glossary_page import glossary_page, save_glossary  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 HOST = "127.0.0.1"
@@ -65,11 +70,13 @@ def start_job(input_path, numbers):
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     out = f"temp/{input_path.stem}_ui_{stamp}.epub"
     chapter_dir = f"temp/{input_path.stem}_chapters"
+    glossary = f"glossary/{input_path.stem}.txt"
     only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
     cmd = (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
         f"python -u main.py {quote(str(input_path))} -o {quote(out)} "
         f"--project-dir {quote(str(project))} --export-chapters "
+        f"--glossary {quote(glossary)} "
         f"--chapter-output-dir {quote(chapter_dir)}{only} "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; echo SELESAI; sleep 3600"
     )
@@ -109,6 +116,7 @@ def page(selected="", message=""):
     rows = read_chapters(project_for(current)) if current else []
     running = job_running()
     exports = files()
+    glossary_href = url_quote(f"glossary/{current.stem}.txt") if current else ""
     table = ""
     for r in rows:
         number = int(r["id"].split("_")[1])
@@ -145,6 +153,7 @@ select{{font-size:17px;margin:4px 0;width:100%}}button{{font-size:17px;padding:8
 <form method="post" action="/start">
 <label>Novel</label>
 <select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{options}</select>
+<p><a href="/glossary?file={glossary_href}">Edit glosarium novel ini</a></p>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 <button type="submit">Mulai</button>
@@ -178,7 +187,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlparse(self.path)
-        if url.path == "/":
+        if url.path == "/glossary":
+            query = parse_qs(url.query)
+            self._send(200, glossary_page(query.get("file", [""])[0], query.get("msg", [""])[0]))
+        elif url.path == "/":
             query = parse_qs(url.query)
             selected = query.get("input", [""])[0]
             self._send(200, page(selected, query.get("msg", [""])[0]))
@@ -199,6 +211,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         form = parse_qs(self.rfile.read(length).decode("utf-8"))
+        if self.path == "/glossary/save":
+            self._redirect(save_glossary(form))
+            return
         selected = form.get("input", [""])[0]
         try:
             if self.path == "/start":
