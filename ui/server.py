@@ -151,15 +151,18 @@ def files():
     return found
 
 
-def chapter_key(stem, number, exports):
-    for ext in FORMATS:
-        key = f"temp/{stem}_chapters/chapter-{number:02d}.{ext}"
+def chapter_files(stem, number, exports):
+    """Format file ekspor yang sudah ada untuk satu chapter, misalnya epub dan docx."""
+    found = {}
+    for fmt in FORMATS:
+        key = f"temp/{stem}_chapters/chapter-{number:02d}.{fmt}"
         if key in exports:
-            return key
-    return None
+            found[fmt] = key
+    return found
 
 
-def page(selected="", choice="", message=""):
+def page(selected="", choice="", message="", fmt="epub"):
+    fmt = fmt if fmt in FORMATS else "epub"
     novels = novel_files()
     current = next((p for p in novels if f"input/{p.name}" == selected), novels[0] if novels else None)
     novel_options = "".join(
@@ -190,12 +193,15 @@ def page(selected="", choice="", message=""):
     for r in rows:
         number = int(r["id"].split("_")[1])
         rid = html.escape(r["id"])
-        checked = "" if r["status"] == "completed" else " checked"
-        key = chapter_key(stem, number, exports)
-        if r["status"] != "completed":
+        have = chapter_files(stem, number, exports)
+        done = r["status"] == "completed"
+        checked = " checked" if not done or fmt not in have else ""
+        if not done:
             file_cell = ""
-        elif key:
-            file_cell = f'<a href="/file/{url_quote(key)}">unduh</a>'
+        elif have:
+            file_cell = " ".join(f'<a href="/file/{url_quote(have[f])}">unduh {f}</a>' for f in have)
+            if fmt not in have:
+                file_cell += f"<br><i>belum ada {fmt}</i>"
         else:
             file_cell = "belum diekspor"
         label = "berjalan" if running and r["status"] == "in_progress" else STATUS_TEXT.get(r["status"], r["status"])
@@ -206,6 +212,12 @@ def page(selected="", choice="", message=""):
         )
     notice = "" if rows else "<p>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
     listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
+    format_js = f"location.href='/?input={input_param}&g={url_quote(choice)}&f='+this.value"
+    format_radios = "".join(
+        f'<label><input type="radio" name="fmt" value="{f}"'
+        f'{" checked" if f == fmt else ""} onchange="{format_js}"> {f.upper()}</label> '
+        for f in FORMATS
+    )
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -228,10 +240,9 @@ select,input[type=text]{{font-size:17px;margin:4px 0;width:100%}}button{{font-si
 <label><input type="radio" name="mode" value="export"> Ekspor chapter selesai (tanpa menerjemahkan)</label><br>
 <label><input type="radio" name="mode" value="scan"> Scan glosarium saja</label>
 <label>Format hasil</label><br>
-<label><input type="radio" name="fmt" value="epub" checked> EPUB</label>
-<label><input type="radio" name="fmt" value="docx"> DOCX</label>
+{format_radios}
 <label>Glosarium</label>
-<select name="glossary" onchange="location.href='/?input={input_param}&g='+encodeURIComponent(this.value)">{options}</select>
+<select name="glossary" onchange="location.href='/?input={input_param}&f={fmt}&g='+encodeURIComponent(this.value)">{options}</select>
 <input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru">
 {editor}
 {notice}
@@ -269,7 +280,15 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         query = parse_qs(url.query)
         if url.path == "/":
-            self._send(200, page(query.get("input", [""])[0], query.get("g", [""])[0], query.get("msg", [""])[0]))
+            self._send(
+                200,
+                page(
+                    query.get("input", [""])[0],
+                    query.get("g", [""])[0],
+                    query.get("msg", [""])[0],
+                    query.get("f", ["epub"])[0],
+                ),
+            )
         elif url.path == "/glossary":
             self._send(200, glossary_page(query.get("file", [""])[0], query.get("msg", [""])[0]))
         elif url.path.startswith("/file/"):
@@ -294,12 +313,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         selected = form.get("input", [""])[0]
         choice = form.get("glossary", ["__new__"])[0]
+        fmt = form.get("fmt", ["epub"])[0]
+        fmt = fmt if fmt in FORMATS else "epub"
         try:
             if self.path == "/start":
                 input_path = safe_input(selected)
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 mode = form.get("mode", ["translate"])[0]
-                fmt = form.get("fmt", ["epub"])[0]
                 if mode not in ("translate", "export", "scan"):
                     raise ValueError("mode tidak dikenal")
                 rows = read_chapters(project_for(input_path))
@@ -315,7 +335,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
         except (ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as exc:
             msg = f"Gagal: {exc}"
-        self._redirect(f"/?input={url_quote(selected)}&g={url_quote(choice)}&msg={url_quote(msg)}")
+        self._redirect(
+            f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&msg={url_quote(msg)}"
+        )
 
 
 if __name__ == "__main__":

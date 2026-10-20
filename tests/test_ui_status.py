@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui.server import build_command, project_for, read_chapters, resolve_glossary, safe_input, start_job
+from ui.server import build_command, chapter_files, project_for, read_chapters, resolve_glossary, safe_input, start_job
 
 
 def test_read_chapters_reads_progress(tmp_path):
@@ -49,6 +49,20 @@ def test_build_command_for_scan_translate_and_export():
     ex = build_command(Path("input/novel.epub"), {2, 3}, "epub", "novel.txt", "export", "20260101_0000")
     assert "--export-only" in ex
     assert "--chapter 2,3" in ex
+
+
+def test_chapter_files_lists_each_format():
+    exports = {
+        "temp/x_chapters/chapter-02.epub": Path("a"),
+        "temp/x_chapters/chapter-02.docx": Path("b"),
+        "temp/x_chapters/chapter-03.epub": Path("c"),
+    }
+    assert chapter_files("x", 2, exports) == {
+        "epub": "temp/x_chapters/chapter-02.epub",
+        "docx": "temp/x_chapters/chapter-02.docx",
+    }
+    assert chapter_files("x", 3, exports) == {"epub": "temp/x_chapters/chapter-03.epub"}
+    assert chapter_files("x", 4, exports) == {}
 
 
 def test_resolve_glossary_names():
