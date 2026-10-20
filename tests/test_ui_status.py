@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui.server import project_for, read_chapters, safe_input, start_job
+from ui.server import build_command, project_for, read_chapters, resolve_glossary, safe_input, start_job
 
 
 def test_read_chapters_reads_progress(tmp_path):
@@ -28,11 +28,31 @@ def test_paths_from_browser_are_checked():
     with pytest.raises(ValueError):
         safe_input("input/../secret.epub")
     with pytest.raises(ValueError):
-        start_job(Path("input/a.epub"), set())
+        safe_input("input/novel.pdf")
     with pytest.raises(ValueError):
-        start_job(Path("input/a.epub"), {0})
+        start_job(Path("input/a.epub"), set(), "epub", "a.txt", "translate")
+    with pytest.raises(ValueError):
+        start_job(Path("input/a.epub"), None, "pdf", "a.txt", "translate")
+
+
+def test_build_command_for_scan_and_translate():
+    scan = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "scan", "20260101_0000")
+    assert "--scan-glossary" in scan
+    assert " -o " not in scan
+    tl = build_command(Path("input/novel.docx"), {1}, "docx", "novel.txt", "translate", "20260101_0000")
+    assert "temp/novel_ui_20260101_0000.docx" in tl
+    assert "--chapter 1" in tl
+    assert "--glossary" in tl
+
+
+def test_resolve_glossary_names():
+    assert resolve_glossary("__new__", "novel_baru") == "novel_baru.txt"
+    with pytest.raises(ValueError):
+        resolve_glossary("__new__", "a b")
+    with pytest.raises(ValueError):
+        resolve_glossary("tidak_ada.txt", "")
 
 
 def test_project_follows_novel_name():
     assert project_for(Path("input/mt_v15.epub")) == Path("temp/mt_project")
-    assert project_for(Path("input/RZxMT_Chapter_1.epub")) == Path("temp/RZxMT_Chapter_1_project")
+    assert project_for(Path("input/RZxMT_Chapter_1.docx")) == Path("temp/RZxMT_Chapter_1_project")

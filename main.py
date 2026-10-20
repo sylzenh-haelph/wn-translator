@@ -274,7 +274,7 @@ def reconstruct_output(
         reconstruct_epub(
             translated_document,
             output_path,
-            source_path=input_path,
+            source_path=input_path if input_path.suffix.lower() == ".epub" else None,
         )
         return
 
