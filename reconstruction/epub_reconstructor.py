@@ -3,6 +3,7 @@ import uuid
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import unquote
+from xml.sax.saxutils import escape
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -743,6 +744,19 @@ def _update_ncx_source(
 
 
 
+def _build_generated_nav(titles):
+    items = "".join(
+        f'<li><a href="{escape(href)}">{escape(title)}</a></li>'
+        for href, title in titles.items()
+    )
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">'
+        "<head><title>Daftar Isi</title></head><body>"
+        '<nav epub:type="toc" id="toc"><ol>' + items + "</ol></nav></body></html>"
+    )
+
+
 def reconstruct_epub(
     document: Document,
     output_path,
@@ -902,6 +916,20 @@ def reconstruct_epub(
         generated_paths.add(
             ncx_path
         )
+
+    if not structure.get("navigation_items"):
+        # shortcut: EPUB sumber tanpa nav (mis. EPUB 2 ber-NCX) diberi daftar isi baru agar EPUB 3 valid
+        nav_href = "nav-generated.xhtml"
+        nav_path = _normalize_zip_path(f"{_opf_directory(opf_path)}/{nav_href}")
+        structure["manifest"]["nav-generated"] = {
+            "href": nav_href,
+            "media_type": "application/xhtml+xml",
+            "properties": "nav",
+        }
+        generated_xhtml[nav_path] = _build_generated_nav(
+            _build_navigation_titles(document, structure)
+        )
+        generated_paths.add(nav_path)
 
     match = re.search(r"_v(\d+)$", output_path.stem)
     content_opf = _build_content_opf(
