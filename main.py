@@ -424,6 +424,8 @@ def _prune_chapter_epub(
     epub_path: Path,
     chapter_document,
 ):
+    import posixpath
+    import re
     from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
     structure = chapter_document.metadata.get("epub", {})
@@ -442,6 +444,18 @@ def _prune_chapter_epub(
 
         if path:
             keep_xhtml.add(str(path).lstrip("/"))
+
+    # Dokumen navigasi bukan bagian spine, tapi wajib ada agar manifest valid.
+    # Dibaca dari OPF hasil build, karena nav buatan dibuat setelah daftar ini.
+    with ZipFile(epub_path, "r") as source_zip:
+        container = source_zip.read("META-INF/container.xml").decode("utf-8")
+        opf_name = re.search(r'full-path="([^"]+)"', container).group(1)
+        opf = source_zip.read(opf_name).decode("utf-8")
+
+    for item in re.findall(r"<item\b[^>]*>", opf):
+        if re.search(r'properties="[^"]*\bnav\b', item):
+            href = re.search(r'href="([^"]+)"', item).group(1)
+            keep_xhtml.add(posixpath.normpath(posixpath.join(posixpath.dirname(opf_name), href)))
 
     if not keep_xhtml:
         raise RuntimeError(
