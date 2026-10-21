@@ -30,6 +30,35 @@ MIME = {
 }
 GLOSSARY_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
 
+EXTRA_STYLE = """
+progress{width:100%;height:18px;accent-color:var(--accent);margin:6px 0}
+.wrap{position:relative}
+.lock{position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(18,18,18,.72);border-radius:10px;cursor:pointer;color:var(--fg);font-weight:bold}
+button.flash{box-shadow:0 0 0 4px #f28b82}
+"""
+
+SCRIPT = """
+function toStop(){
+  var b=document.getElementById('stop-btn');
+  if(!b){return;}
+  b.scrollIntoView({behavior:'smooth',block:'center'});
+  b.classList.add('flash');
+  setTimeout(function(){b.classList.remove('flash');},1500);
+}
+(function(){
+  var log=document.getElementById('log');
+  if(log){
+    if(localStorage.getItem('logOpen')!=='0'){log.open=true;}
+    log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});
+    var pre=log.querySelector('pre');
+    if(pre){pre.scrollTop=pre.scrollHeight;}
+  }
+  window.addEventListener('beforeunload',function(){sessionStorage.setItem('scrollY',String(window.scrollY));});
+  var y=sessionStorage.getItem('scrollY');
+  if(y){window.scrollTo(0,parseInt(y,10));}
+})();
+"""
+
 
 def safe_input(value):
     path = Path(value)
@@ -85,6 +114,20 @@ def read_chapters(project):
             done = sum(1 for c in chunks.values() if c.get("qa_passed") is True)
         rows.append({"id": item["id"], "title": item["title"], "status": status, "done": done, "total": total})
     return rows
+
+
+def progress_summary(rows):
+    # shortcut: total chunk hanya dari chapter yang sudah punya progres; chapter yang belum mulai belum ikut
+    done = sum(r["done"] for r in rows)
+    total = sum(r["total"] for r in rows)
+    return {
+        "done": done,
+        "total": total,
+        "percent": round(100 * done / total) if total else 0,
+        "finished": sum(1 for r in rows if r["status"] == "completed"),
+        "chapters": len(rows),
+        "current": next((r["title"] for r in rows if r["status"] == "in_progress"), ""),
+    }
 
 
 def job_running():
@@ -189,6 +232,7 @@ def page(selected="", choice="", message="", fmt="epub"):
     rows = read_chapters(project_for(current)) if current else []
     running = job_running()
     exports = files()
+
     table = ""
     for r in rows:
         number = int(r["id"].split("_")[1])
@@ -218,20 +262,40 @@ def page(selected="", choice="", message="", fmt="epub"):
         f'{" checked" if f == fmt else ""} onchange="{format_js}"> {f.upper()}</label>'
         for f in FORMATS
     )
+
+    summary = progress_summary(rows)
+    if rows and summary["total"]:
+        progress_block = (
+            "<section><h3>Progres</h3>"
+            f"<progress value='{summary['done']}' max='{summary['total']}'></progress>"
+            f"<p class='muted'>{summary['done']}/{summary['total']} chunk ({summary['percent']}%) &middot; "
+            f"{summary['finished']}/{summary['chapters']} chapter selesai</p>"
+            + (f"<p class='muted'>Sedang: {html.escape(summary['current'])}</p>" if summary["current"] else "")
+            + "</section>"
+        )
+    elif running:
+        progress_block = "<section><h3>Progres</h3><p class='muted'>Menyiapkan proses...</p></section>"
+    else:
+        progress_block = ""
+
     state = "berjalan" if running else "berhenti"
     state_class = "run" if running else "idle"
     refresh = '<meta http-equiv="refresh" content="10">' if running else ""
     status_block = (
         f"<section><p>Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
-        '<form method="post" action="/stop"><button type="submit">Berhenti</button></form></section>'
+        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
     )
     files_block = (
         "<section><h3>File hasil</h3>"
         + (f"<ul>{listing}</ul>" if listing else "<p class='muted'>Belum ada file hasil.</p>")
         + "</section>"
     )
-    form_block = f"""<form method="post" action="/start">
+    lock = (
+        "<div class='lock' onclick='toStop()'>Proses sedang berjalan.<br>Tekan Berhenti dulu untuk mengubah pilihan.</div>"
+        if running else ""
+    )
+    form_block = f"""<div class="wrap">{lock}<form method="post" action="/start">
 <section>
 <h3>Mulai proses</h3>
 <label>Novel</label>
@@ -256,19 +320,22 @@ def page(selected="", choice="", message="", fmt="epub"):
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 <button type="submit">Mulai</button>
 </section>
-</form>"""
+</form></div>"""
+    log_block = f'<details id="log"><summary>Log terbaru</summary><pre>{html.escape(tail(JOB_LOG))}</pre></details>'
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh}
 <title>WN Translator</title>
-<style>{STYLE}</style>
+<style>{STYLE}{EXTRA_STYLE}</style>
 </head><body>
 <h1>WN Translator</h1>
 {status_block}
+{progress_block}
 {files_block}
 {form_block}
-<details><summary>Log terbaru</summary><pre>{html.escape(tail(JOB_LOG))}</pre></details>
+{log_block}
+<script>{SCRIPT}</script>
 </body></html>"""
 
 

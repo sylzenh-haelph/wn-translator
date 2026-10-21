@@ -6,7 +6,16 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ui.server import build_command, chapter_files, project_for, read_chapters, resolve_glossary, safe_input, start_job
+from ui.server import (
+    build_command,
+    chapter_files,
+    progress_summary,
+    project_for,
+    read_chapters,
+    resolve_glossary,
+    safe_input,
+    start_job,
+)
 
 
 def test_read_chapters_reads_progress(tmp_path):
@@ -22,6 +31,18 @@ def test_read_chapters_reads_progress(tmp_path):
     rows = read_chapters(tmp_path)
     assert rows[0] == {"id": "chapter_001", "title": "A", "status": "completed", "done": 2, "total": 2}
     assert rows[1]["status"] == "not_started"
+
+
+def test_progress_summary_counts_chunks_and_chapters():
+    rows = [
+        {"title": "A", "status": "completed", "done": 4, "total": 4},
+        {"title": "B", "status": "in_progress", "done": 1, "total": 4},
+        {"title": "C", "status": "not_started", "done": 0, "total": 0},
+    ]
+    s = progress_summary(rows)
+    assert (s["done"], s["total"], s["percent"]) == (5, 8, 62)
+    assert (s["finished"], s["chapters"], s["current"]) == (1, 3, "B")
+    assert progress_summary([])["percent"] == 0
 
 
 def test_paths_from_browser_are_checked():
