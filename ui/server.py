@@ -36,6 +36,9 @@ MIME = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 GLOSSARY_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
+OUTPUT_NAME = re.compile(r"^[A-Za-z0-9 _.\-()]+$")
+RENAME_KEY = "if(event.key==='Enter'){event.preventDefault();renameGlossary();}"
+NO_ENTER = "if(event.key==='Enter'){event.preventDefault();}"
 
 EXTRA_STYLE = """
 .wrap{position:relative}
@@ -61,6 +64,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:8px;vertical-align:middle;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.rowbox{display:flex;gap:8px;align-items:center}
+.rowbox input{flex:1}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -77,6 +82,56 @@ function setMode(v){
   if(out){out.style.display=(v==='scan')?'none':'';}
   var h=document.getElementById('modehint');
   if(h){h.textContent=HINTS[v]||'';}
+}
+function setFormat(v){
+  document.querySelectorAll('tr[data-id]').forEach(function(tr){
+    var cb=tr.querySelector('input[name=ch]');
+    if(!cb){return;}
+    var have=(tr.getAttribute('data-have')||'').split(',');
+    var done=tr.getAttribute('data-done')==='1';
+    cb.checked=(!done)||(have.indexOf(v)<0);
+  });
+}
+function pickGlossary(v){
+  var isNew=v==='__new__';
+  var n=document.getElementById('newg');
+  if(n){n.style.display=isNew?'':'none';}
+  var r=document.getElementById('renamebox');
+  if(r){r.style.display=isNew?'none':'';}
+  var a=document.getElementById('editlink');
+  if(a){
+    if(isNew){a.style.display='none';}
+    else{a.style.display='';a.href='/glossary?file='+encodeURIComponent('glossary/'+v);}
+  }
+}
+function go(extra){
+  var m=document.querySelector('input[name=mode]:checked');
+  var f=document.querySelector('input[name=fmt]:checked');
+  var o=document.getElementById('out_name');
+  var q='&m='+(m?m.value:'translate')+'&f='+(f?f.value:'epub');
+  if(o&&o.value){q+='&o='+encodeURIComponent(o.value);}
+  location.href='/?'+extra+q;
+}
+function renameGlossary(){
+  var form=document.getElementById('mainform');
+  var old=document.getElementById('gsel').value;
+  var to=document.getElementById('rename_to').value;
+  var data=new FormData(form);
+  data.delete('ch');
+  data.set('glossary',old);
+  data.set('rename_to',to);
+  var f=document.createElement('form');
+  f.method='post';
+  f.action='/glossary/rename';
+  data.forEach(function(value,key){
+    var i=document.createElement('input');
+    i.type='hidden';
+    i.name=key;
+    i.value=value;
+    f.appendChild(i);
+  });
+  document.body.appendChild(f);
+  f.submit();
 }
 (function(){
   var log=document.getElementById('log');
@@ -124,6 +179,35 @@ def resolve_glossary(choice, new_name):
     return choice
 
 
+def rename_glossary(old, new_name):
+    if old not in glossary_files():
+        raise ValueError("glosarium tidak ditemukan")
+    name = new_name.strip()
+    if not GLOSSARY_NAME.match(name):
+        raise ValueError("nama baru hanya huruf, angka, _ atau -")
+    target = f"{name}.txt"
+    if target == old:
+        return old
+    if target in glossary_files():
+        raise ValueError("nama itu sudah dipakai glosarium lain")
+    if job_running():
+        raise RuntimeError("berhenti dulu sebelum mengganti nama glosarium")
+    (ROOT / "glossary" / old).rename(ROOT / "glossary" / target)
+    return target
+
+
+def clean_output_name(value):
+    name = value.strip()
+    for ext in (".epub", ".docx"):
+        if name.lower().endswith(ext):
+            name = name[: -len(ext)].rstrip()
+    if not name:
+        return ""
+    if not OUTPUT_NAME.match(name) or name.startswith(".") or ".." in name or len(name) > 80:
+        raise ValueError("nama file output hanya huruf, angka, spasi, _ - . ( ), maks 80 karakter")
+    return name
+
+
 def project_for(input_path):
     # shortcut: mt_v15 memakai folder lama temp/mt_project, novel lain punya folder sendiri
     if input_path.stem == "mt_v15":
@@ -167,14 +251,15 @@ def job_running():
     return subprocess.run(["tmux", "has-session", "-t", JOB], capture_output=True).returncode == 0
 
 
-def build_command(input_path, numbers, fmt, glossary_name, mode, stamp):
+def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name=""):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
     glossary = quote(f"glossary/{glossary_name}")
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
     else:
-        out = quote(f"temp/{input_path.stem}_ui_{stamp}.{fmt}")
+        base = out_name or f"{input_path.stem}_ui_{stamp}"
+        out = quote(f"temp/{base}.{fmt}")
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
         export_only = " --export-only" if mode == "export" else ""
@@ -189,7 +274,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp):
     )
 
 
-def start_job(input_path, numbers, fmt, glossary_name, mode):
+def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
@@ -199,11 +284,12 @@ def start_job(input_path, numbers, fmt, glossary_name, mode):
         raise ValueError("pilih chapter yang mau diekspor")
     if mode == "translate" and numbers is not None and (not numbers or min(numbers) < 1):
         raise ValueError("pilih minimal satu chapter")
+    name = clean_output_name(out_name)
     if job_running():
         raise RuntimeError("masih ada proses yang berjalan")
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp)
+    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
@@ -239,7 +325,14 @@ def chapter_files(stem, number, exports):
     return found
 
 
-def page(selected="", choice="", message="", fmt="epub", mode="translate"):
+def state_location(selected, choice, fmt, mode, out_name, msg):
+    return (
+        f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&m={mode}"
+        f"&o={url_quote(out_name)}&msg={url_quote(msg)}"
+    )
+
+
+def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name=""):
     fmt = fmt if fmt in FORMATS else "epub"
     mode = mode if mode in MODES else "translate"
     novels = novel_files()
@@ -260,9 +353,14 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
     if choice not in choices and choice != "__new__":
         options += f'<option value="{html.escape(choice)}" selected>{html.escape(choice)} (baru)</option>'
     options += f'<option value="__new__"{" selected" if choice == "__new__" else ""}>(glosarium baru)</option>'
-    editor = ""
-    if choice != "__new__":
-        editor = f'<p><a href="/glossary?file={url_quote("glossary/" + choice)}">Edit glosarium yang dipilih</a></p>'
+    is_new = choice == "__new__"
+    editor_style = "display:none" if is_new else ""
+    editor = (
+        f'<p><a id="editlink" style="{editor_style}" '
+        f'href="/glossary?file={url_quote("glossary/" + choice)}">Edit glosarium yang dipilih</a></p>'
+    )
+    new_style = "" if is_new else "display:none"
+    rename_style = "display:none" if is_new else ""
     stem = current.stem if current else ""
     input_param = url_quote(f"input/{current.name}") if current else ""
     rows = read_chapters(project_for(current)) if current else []
@@ -274,6 +372,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
         number = int(r["id"].split("_")[1])
         rid = html.escape(r["id"])
         have = chapter_files(stem, number, exports)
+        have_attr = ",".join(have)
         done = r["status"] == "completed"
         checked = " checked" if not done or fmt not in have else ""
         if not done:
@@ -288,16 +387,16 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
             label = "<span class='spin'></span>berjalan"
         else:
             label = STATUS_TEXT.get(r["status"], r["status"])
+        done_attr = "1" if done else "0"
         table += (
-            f'<tr><td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
+            f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}">'
+            f'<td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
             f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
             f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
     listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
 
-    format_js = f"location.href='/?input={input_param}&g={url_quote(choice)}&m={mode}&f='+this.value"
-    glossary_js = f"location.href='/?input={input_param}&f={fmt}&m={mode}&g='+encodeURIComponent(this.value)"
     mode_inputs = "".join(
         f'<input type="radio" id="m-{key}" name="mode" value="{key}"'
         f'{" checked" if key == mode else ""} onchange="setMode(this.value)">'
@@ -306,7 +405,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
     )
     format_inputs = "".join(
         f'<input type="radio" id="f-{f}" name="fmt" value="{f}"'
-        f'{" checked" if f == fmt else ""} onchange="{format_js}">'
+        f'{" checked" if f == fmt else ""} onchange="setFormat(this.value)">'
         f'<label for="f-{f}">{f.upper()}</label>'
         for f in FORMATS
     )
@@ -355,11 +454,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
         if running else ""
     )
     outsec_style = " style='display:none'" if mode == "scan" else ""
-    form_block = f"""<form method="post" action="/start">
+    form_block = f"""<form method="post" action="/start" id="mainform">
 <section class="wrap">{lock}
 <h3>Mulai proses</h3>
 <label>Novel</label>
-<select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{novel_options}</select>
+<select name="input" onchange="go('input='+encodeURIComponent(this.value))">{novel_options}</select>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label>
 <div class="seg tri">{mode_inputs}<span class="thumb"></span></div>
@@ -367,10 +466,22 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate"):
 <div id="outsec"{outsec_style}>
 <label>Format output</label>
 <div class="seg duo">{format_inputs}<span class="thumb"></span></div>
+<label>Nama file output</label>
+<input type="text" id="out_name" name="out_name" value="{html.escape(out_name)}" placeholder="kosong = otomatis" onkeydown="{NO_ENTER}">
+<p class="muted">Berlaku untuk file hasil penuh. Nama file ekspor per chapter tidak berubah.</p>
 </div>
 <label>Glosarium</label>
-<select name="glossary" onchange="{glossary_js}">{options}</select>
-<input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru">
+<select name="glossary" id="gsel" onchange="pickGlossary(this.value)">{options}</select>
+<div id="newg" style="{new_style}">
+<input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru" onkeydown="{NO_ENTER}">
+<p class="muted">Nama untuk glosarium baru. Dibuat saat proses dimulai.</p>
+</div>
+<div id="renamebox" style="{rename_style}">
+<div class="rowbox">
+<input type="text" id="rename_to" placeholder="nama baru untuk glosarium ini" onkeydown="{RENAME_KEY}">
+<button type="button" onclick="renameGlossary()">Ganti nama</button>
+</div>
+</div>
 {editor}
 </section>
 <section>
@@ -430,6 +541,7 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("msg", [""])[0],
                     query.get("f", ["epub"])[0],
                     query.get("m", ["translate"])[0],
+                    query.get("o", [""])[0],
                 ),
             )
         elif url.path == "/glossary":
@@ -460,13 +572,24 @@ class Handler(BaseHTTPRequestHandler):
         fmt = fmt if fmt in FORMATS else "epub"
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
+        out_name = form.get("out_name", [""])[0]
+
+        if self.path == "/glossary/rename":
+            try:
+                choice = rename_glossary(choice, form.get("rename_to", [""])[0])
+                msg = f"Glosarium diganti namanya menjadi {choice}."
+            except (ValueError, RuntimeError) as exc:
+                msg = f"Gagal: {exc}"
+            self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
+            return
+
         try:
             if self.path == "/start":
                 input_path = safe_input(selected)
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 rows = read_chapters(project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
-                start_job(input_path, numbers, fmt, glossary_name, mode)
+                start_job(input_path, numbers, fmt, glossary_name, mode, out_name)
                 choice = glossary_name
                 msg = "Proses dimulai."
             elif self.path == "/stop":
@@ -477,9 +600,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
         except (ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as exc:
             msg = f"Gagal: {exc}"
-        self._redirect(
-            f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&m={mode}&msg={url_quote(msg)}"
-        )
+        self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
 
 
 if __name__ == "__main__":

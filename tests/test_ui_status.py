@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ui.server import (
     build_command,
     chapter_files,
+    clean_output_name,
     progress_summary,
     project_for,
     read_chapters,
@@ -56,6 +57,17 @@ def test_paths_from_browser_are_checked():
         start_job(Path("input/a.epub"), None, "pdf", "a.txt", "translate")
     with pytest.raises(ValueError):
         start_job(Path("input/a.epub"), None, "epub", "a.txt", "export")
+    with pytest.raises(ValueError):
+        start_job(Path("input/a.epub"), None, "epub", "a.txt", "translate", "../x")
+
+
+def test_clean_output_name():
+    assert clean_output_name("") == ""
+    assert clean_output_name("Bab 3.epub") == "Bab 3"
+    assert clean_output_name("RZxMT (final)") == "RZxMT (final)"
+    for bad in ["../x", "a/b", ".hidden", "x" * 81, "a;rm"]:
+        with pytest.raises(ValueError):
+            clean_output_name(bad)
 
 
 def test_build_command_for_scan_translate_and_export():
@@ -70,6 +82,11 @@ def test_build_command_for_scan_translate_and_export():
     ex = build_command(Path("input/novel.epub"), {2, 3}, "epub", "novel.txt", "export", "20260101_0000")
     assert "--export-only" in ex
     assert "--chapter 2,3" in ex
+
+
+def test_build_command_uses_custom_output_name():
+    cmd = build_command(Path("input/novel.epub"), None, "docx", "novel.txt", "translate", "20260101_0000", "Bab 3")
+    assert "temp/Bab 3.docx" in cmd
 
 
 def test_chapter_files_lists_each_format():
