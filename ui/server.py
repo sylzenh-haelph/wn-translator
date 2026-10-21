@@ -72,6 +72,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .divider{display:flex;align-items:center;gap:8px;color:var(--accent);font-size:13px;margin:12px 0}
 .divider::before,.divider::after{content:"";flex:1;border-top:1px dashed var(--line)}
 details pre{max-height:320px;overflow:auto}
+.bar{position:relative}
+.shine{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:translateX(-100%);display:none}
+.running .shine{display:block;animation:shine 2.2s ease-in-out infinite}
+@keyframes shine{to{transform:translateX(100%)}}
+.bar.tick{box-shadow:0 0 0 3px rgba(129,201,149,.45);transition:box-shadow .3s}
+.gain{color:var(--ok);font-size:14px;font-weight:bold;margin-top:4px;animation:gain 2.6s ease forwards}
+@keyframes gain{0%{opacity:0;transform:translateY(4px)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -151,6 +158,49 @@ function renameGlossary(){
   var y=sessionStorage.getItem('scrollY');
   if(y){window.scrollTo(0,parseInt(y,10));}
 })();
+function easeOut(t){return 1-Math.pow(1-t,3);}
+function animateProgress(){
+  var num=document.getElementById('pnum');
+  if(!num){return;}
+  var fill=document.getElementById('pfill');
+  var bar=fill?fill.parentNode:null;
+  var unit=num.getAttribute('data-unit')||'chunk';
+  var done=parseInt(num.getAttribute('data-done'),10)||0;
+  var total=parseInt(num.getAttribute('data-total'),10)||0;
+  var key='prog:'+num.getAttribute('data-key');
+  var prev=null;
+  try{prev=JSON.parse(localStorage.getItem(key)||'null');}catch(e){prev=null;}
+  var fromDone=(prev&&prev.done<=done)?prev.done:0;
+  var fromPct=(prev&&prev.total)?(prev.done/prev.total*100):0;
+  var toPct=total?(done/total*100):0;
+  var gained=done-fromDone;
+  var duration=Math.min(2600,Math.max(900,700+gained*500));
+  if(fill){fill.style.transition='none';fill.style.width=fromPct+'%';}
+  num.textContent=fromDone+'/'+total+' '+unit+' ('+Math.round(fromPct)+'%)';
+  if(bar&&gained>0){
+    bar.classList.add('tick');
+    setTimeout(function(){bar.classList.remove('tick');},1400);
+    var gain=document.createElement('div');
+    gain.className='gain';
+    gain.textContent='+'+gained+' '+unit+' selesai';
+    bar.parentNode.insertBefore(gain,bar.nextSibling);
+    setTimeout(function(){gain.remove();},2800);
+  }
+  var start=null;
+  function frame(now){
+    if(start===null){start=now;}
+    var t=Math.min(1,(now-start)/duration);
+    var e=easeOut(t);
+    var pct=fromPct+(toPct-fromPct)*e;
+    var cur=Math.round(fromDone+(done-fromDone)*e);
+    if(fill){fill.style.width=pct+'%';}
+    num.textContent=cur+'/'+total+' '+unit+' ('+Math.round(pct)+'%)';
+    if(t<1){requestAnimationFrame(frame);}
+  }
+  requestAnimationFrame(frame);
+  localStorage.setItem(key,JSON.stringify({done:done,total:total}));
+}
+animateProgress();
 """
 
 
@@ -165,17 +215,17 @@ def scan_progress(project):
     return data if data.get("total") else None
 
 
-def scan_bar(state):
+def scan_bar(state, key=""):
     total = state.get("total", 0)
     done = state.get("done", 0)
     percent = round(100 * done / total) if total else 0
-    text = f"{done}/{total} chapter ({percent}%)"
+    text = f"<span id='pnum' data-key='{html.escape(key)}-scan' data-unit='chapter' data-done='{done}' data-total='{total}'>{done}/{total} chapter ({percent}%)</span>"
     current = state.get("current", "")
     if current and not state.get("finished"):
         text += f" &middot; Sedang: {html.escape(current)}"
     return (
         "<section class='running'><h3>Progres scan</h3>"
-        f"<div class='bar'><div class='fill' style='width:{percent}%'></div></div>"
+        f"<div class='bar'><div class='fill' id='pfill' style='width:{percent}%'></div><div class='shine'></div></div>"
         f"<p class='muted'>{text}</p></section>"
     )
 
@@ -209,6 +259,25 @@ def download_name(key, target):
 def disposition(name):
     ascii_name = name.encode("ascii", "replace").decode("ascii").replace('"', "")
     return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{url_quote(name)}"
+
+
+def chunk_hint(rows, running, project):
+    if not running:
+        return ""
+    live = [r for r in rows if r["status"] == "in_progress" and r["total"]]
+    if not live:
+        return ""
+
+    def touched(row):
+        path = project / "progress" / f"{row['id']}.json"
+        return path.stat().st_mtime if path.exists() else 0
+
+    active = max(live, key=touched)
+    nxt = min(active["done"] + 1, active["total"])
+    return (
+        f"<p class='muted'><span class='spin'></span>Sedang: {html.escape(active['title'])}"
+        f" &middot; chunk {nxt}/{active['total']}</p>"
+    )
 
 
 def safe_input(value):
@@ -506,7 +575,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     spinner = "<span class='spin'></span>" if running else ""
     scan_state = scan_progress(project_for(current)) if (running and job_mode == "scan" and current) else None
     if scan_state:
-        progress_block = scan_bar(scan_state)
+        progress_block = scan_bar(scan_state, stem)
     elif rows and summary["total"] and not (running and job_mode == "scan"):
         run_class = "running" if running else ""
         current_line = (
@@ -515,10 +584,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         )
         progress_block = (
             f"<section class='{run_class}'><h3>Progres</h3>"
-            f"<div class='bar'><div class='fill' style='width:{summary['percent']}%'></div></div>"
-            f"<p class='muted'>{summary['done']}/{summary['total']} chunk ({summary['percent']}%) "
+            f"<div class='bar'><div class='fill' id='pfill' style='width:{summary['percent']}%'></div><div class='shine'></div></div>"
+            f"<p class='muted'><span id='pnum' data-key='{html.escape(stem)}-translate' data-unit='chunk' data-done='{summary['done']}' data-total='{summary['total']}'>{summary['done']}/{summary['total']} chunk ({summary['percent']}%)</span> "
             f"&middot; {summary['finished']}/{summary['chapters']} chapter selesai</p>"
-            f"{current_line}</section>"
+            f"{chunk_hint(rows, running, project_for(current) if current else Path('.'))}</section>"
         )
     elif running:
         progress_block = (

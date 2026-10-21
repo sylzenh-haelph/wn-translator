@@ -149,3 +149,25 @@ def test_render_log_splits_sessions(tmp_path, monkeypatch):
     markup = server.render_log()
     assert markup.count("class='divider'") == 2
     assert "<pre>a</pre>" in markup
+
+
+
+def test_chunk_hint_points_to_latest_active_chapter(tmp_path):
+    import os
+    from ui.server import chunk_hint
+
+    (tmp_path / "progress").mkdir()
+    old = tmp_path / "progress" / "chapter_002.json"
+    new = tmp_path / "progress" / "chapter_003.json"
+    old.write_text("{}", encoding="utf-8")
+    new.write_text("{}", encoding="utf-8")
+    os.utime(old, (1000, 1000))
+    os.utime(new, (2000, 2000))
+    rows = [
+        {"id": "chapter_002", "title": "Lama", "status": "in_progress", "done": 1, "total": 8},
+        {"id": "chapter_003", "title": "Baru", "status": "in_progress", "done": 2, "total": 8},
+    ]
+    markup = chunk_hint(rows, True, tmp_path)
+    assert "Baru" in markup
+    assert "chunk 3/8" in markup
+    assert chunk_hint(rows, False, tmp_path) == ""
