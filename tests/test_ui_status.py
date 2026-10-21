@@ -147,7 +147,7 @@ def test_render_log_splits_sessions(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(server, "JOB_LOG", log)
     markup = server.render_log()
-    assert markup.count("class='divider'") == 2
+    assert markup.count("class='sess'") == 2
     assert "<pre>a</pre>" in markup
 
 

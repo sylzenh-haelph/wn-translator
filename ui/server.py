@@ -80,6 +80,10 @@ details pre{max-height:320px;overflow:auto}
 .gain{color:var(--ok);font-size:14px;font-weight:bold;margin-top:4px;animation:gain 2.6s ease forwards}
 @keyframes gain{0%{opacity:0;transform:translateY(4px)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
 select{width:100%;font-size:17px;padding:10px 12px;margin:6px 0;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px}
+.rowbox.head{justify-content:space-between;margin-bottom:6px}
+.rowbox.head h3{margin:0}
+details.sess{margin:8px 0;padding:6px 8px;background:var(--bg)}
+details.sess summary{font-size:14px;font-weight:normal;color:var(--accent)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -473,18 +477,25 @@ def render_log(lines=400):
     if not JOB_LOG.exists():
         return ""
     raw = JOB_LOG.read_text(encoding="utf-8", errors="ignore").splitlines()[-lines:]
-    parts, buffer = [], []
+    sessions = []
+    current = {"title": "Log sebelumnya", "body": []}
     for line in raw:
-        if line.startswith("===== ") and line.endswith(" ====="):
-            if buffer:
-                parts.append("<pre>" + html.escape("\n".join(buffer)) + "</pre>")
-                buffer = []
-            parts.append("<div class='divider'>" + html.escape(line.strip("= ").strip()) + "</div>")
+        if line.startswith("===== MULAI") and line.endswith(" ====="):
+            sessions.append(current)
+            current = {"title": line.strip("= ").strip(), "body": []}
         else:
-            buffer.append(line)
-    if buffer:
-        parts.append("<pre>" + html.escape("\n".join(buffer)) + "</pre>")
-    return "".join(parts)
+            current["body"].append(line)
+    sessions.append(current)
+    sessions = [s for s in sessions if s["body"] or s["title"] != "Log sebelumnya"]
+    markup = []
+    for index, session in enumerate(sessions):
+        opened = " open" if index == len(sessions) - 1 else ""
+        body = html.escape("\n".join(session["body"]))
+        markup.append(
+            f"<details class='sess'{opened}><summary>{html.escape(session['title'])}</summary>"
+            f"<pre>{body}</pre></details>"
+        )
+    return "".join(markup)
 
 
 def tail(path, lines=40):
@@ -682,10 +693,9 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </section>
 {log_block}
 <section>
-<h3>Chapter</h3>
+<div class='rowbox head'><h3>Chapter</h3><button type="submit"{disabled}>Mulai</button></div>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
-<button type="submit"{disabled}>Mulai</button>
 </section>
 </form>"""
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}</script>"
