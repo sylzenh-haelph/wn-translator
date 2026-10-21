@@ -134,3 +134,18 @@ def test_resolve_glossary_names():
 def test_project_follows_novel_name():
     assert project_for(Path("input/mt_v15.epub")) == Path("temp/mt_project")
     assert project_for(Path("input/RZxMT_Chapter_1.docx")) == Path("temp/RZxMT_Chapter_1_project")
+
+
+
+def test_render_log_splits_sessions(tmp_path, monkeypatch):
+    import ui.server as server
+
+    log = tmp_path / "job.log"
+    log.write_text(
+        "a\n===== MULAI terjemahan · x · EPUB · 01-01 00:00 =====\nb\n===== DIHENTIKAN · 01-01 00:05 =====\nc\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server, "JOB_LOG", log)
+    markup = server.render_log()
+    assert markup.count("class='divider'") == 2
+    assert "<pre>a</pre>" in markup

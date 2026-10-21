@@ -69,6 +69,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .rowbox{display:flex;gap:8px;align-items:center}
 .rowbox input{flex:1}
 .sub{color:var(--muted);font-size:15px;margin:-4px 0 14px}
+.divider{display:flex;align-items:center;gap:8px;color:var(--accent);font-size:13px;margin:12px 0}
+.divider::before,.divider::after{content:"";flex:1;border-top:1px dashed var(--line)}
+details pre{max-height:320px;overflow:auto}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -141,8 +144,8 @@ function renameGlossary(){
   if(log){
     if(localStorage.getItem('logOpen')!=='0'){log.open=true;}
     log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});
-    var pre=log.querySelector('pre');
-    if(pre){pre.scrollTop=pre.scrollHeight;}
+    var pres=log.querySelectorAll('pre');
+    if(pres.length){var last=pres[pres.length-1];last.scrollTop=last.scrollHeight;}
   }
   window.addEventListener('beforeunload',function(){sessionStorage.setItem('scrollY',String(window.scrollY));});
   var y=sessionStorage.getItem('scrollY');
@@ -349,13 +352,40 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
         raise RuntimeError("masih ada proses yang berjalan")
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    log_marker(f"MULAI {mode} · {input_path.name} · {fmt.upper()}")
     JOB_MODE.write_text(mode, encoding="utf-8")
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
 def stop_job():
+    log_marker("DIHENTIKAN")
     subprocess.run(["tmux", "kill-session", "-t", JOB], capture_output=True)
+
+
+def log_marker(text):
+    JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%d-%m %H:%M")
+    with JOB_LOG.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n===== {text} · {stamp} =====\n")
+
+
+def render_log(lines=400):
+    if not JOB_LOG.exists():
+        return ""
+    raw = JOB_LOG.read_text(encoding="utf-8", errors="ignore").splitlines()[-lines:]
+    parts, buffer = [], []
+    for line in raw:
+        if line.startswith("===== ") and line.endswith(" ====="):
+            if buffer:
+                parts.append("<pre>" + html.escape("\n".join(buffer)) + "</pre>")
+                buffer = []
+            parts.append("<div class='divider'>" + html.escape(line.strip("= ").strip()) + "</div>")
+        else:
+            buffer.append(line)
+    if buffer:
+        parts.append("<pre>" + html.escape("\n".join(buffer)) + "</pre>")
+    return "".join(parts)
 
 
 def tail(path, lines=40):
@@ -556,7 +586,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <button type="submit"{disabled}>Mulai</button>
 </section>
 </form>"""
-    log_block = f'<details id="log"><summary>Log terbaru</summary><pre>{html.escape(tail(JOB_LOG))}</pre></details>'
+    log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">

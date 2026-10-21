@@ -36,3 +36,16 @@ def test_only_glossary_folder_is_editable():
         safe_glossary("glossary/../x.txt")
     with pytest.raises(ValueError):
         safe_glossary("input/mt_v15.txt")
+
+
+
+def test_editor_has_save_button_at_top_and_bottom(tmp_path, monkeypatch):
+    import ui.glossary_page as gp
+
+    monkeypatch.setattr(gp, "ROOT", tmp_path)
+    (tmp_path / "glossary").mkdir()
+    (tmp_path / "glossary" / "x.txt").write_text("Eris = Eris Keren\n", encoding="utf-8")
+    page = gp.glossary_page("glossary/x.txt")
+    assert page.count("form='gform'") == 1
+    assert page.count("type='submit'") >= 2
+    assert "Eris Keren" in page
