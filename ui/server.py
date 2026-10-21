@@ -24,6 +24,13 @@ JOB_LOG = ROOT / "temp" / "ui_job.log"
 STATUS_TEXT = {"not_started": "belum mulai", "in_progress": "belum selesai", "completed": "selesai"}
 INPUT_SUFFIXES = {".epub", ".docx"}
 FORMATS = ("epub", "docx")
+MODES = ("translate", "export", "scan")
+MODE_LABELS = (("translate", "Terjemahkan"), ("export", "Ekspor"), ("scan", "Scan"))
+HINTS = {
+    "translate": "Menerjemahkan chapter yang dicentang, lalu membuat hasil penuh dalam format yang dipilih.",
+    "export": "Mengekspor chapter yang sudah selesai dan dicentang ke format yang dipilih, tanpa menerjemahkan ulang.",
+    "scan": "Hanya mencari nama dan istilah untuk glosarium. Tidak membuat EPUB atau DOCX.",
+}
 MIME = {
     "epub": "application/epub+zip",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -31,10 +38,30 @@ MIME = {
 GLOSSARY_NAME = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 EXTRA_STYLE = """
-progress{width:100%;height:18px;accent-color:var(--accent);margin:6px 0}
 .wrap{position:relative}
-.lock{position:absolute;top:0;left:0;right:0;bottom:0;z-index:2;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(18,18,18,.72);border-radius:10px;cursor:pointer;color:var(--fg);font-weight:bold}
+.lock{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(18,18,18,.8);border-radius:10px;cursor:pointer;color:var(--fg);font-weight:bold}
 button.flash{box-shadow:0 0 0 4px #f28b82}
+button:disabled{opacity:.45;cursor:not-allowed}
+.seg{position:relative;display:flex;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px;margin:6px 0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{position:relative;z-index:1;flex:1;text-align:center;margin:0;padding:9px 6px;font-size:16px;color:var(--muted);cursor:pointer;transition:color .3s}
+.seg input:checked + label{color:#101418;font-weight:bold}
+.seg .thumb{position:absolute;z-index:0;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:999px;background:var(--accent);transition:transform .35s cubic-bezier(.4,0,.2,1)}
+.seg.duo .thumb{width:calc((100% - 8px)/2)}
+#m-translate:checked ~ .thumb{transform:translateX(0)}
+#m-export:checked ~ .thumb{transform:translateX(100%)}
+#m-scan:checked ~ .thumb{transform:translateX(200%)}
+#f-epub:checked ~ .thumb{transform:translateX(0)}
+#f-docx:checked ~ .thumb{transform:translateX(100%)}
+.bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.fill{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
+.running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.22) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.22) 75%,transparent 75%,transparent);background-size:24px 24px;animation:stripes 1s linear infinite}
+@keyframes stripes{from{background-position:0 0}to{background-position:24px 0}}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:8px;vertical-align:middle;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
 SCRIPT = """
@@ -44,6 +71,12 @@ function toStop(){
   b.scrollIntoView({behavior:'smooth',block:'center'});
   b.classList.add('flash');
   setTimeout(function(){b.classList.remove('flash');},1500);
+}
+function setMode(v){
+  var out=document.getElementById('outsec');
+  if(out){out.style.display=(v==='scan')?'none':'';}
+  var h=document.getElementById('modehint');
+  if(h){h.textContent=HINTS[v]||'';}
 }
 (function(){
   var log=document.getElementById('log');
@@ -160,6 +193,8 @@ def start_job(input_path, numbers, fmt, glossary_name, mode):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
+    if mode not in MODES:
+        raise ValueError("mode tidak dikenal")
     if mode == "export" and not numbers:
         raise ValueError("pilih chapter yang mau diekspor")
     if mode == "translate" and numbers is not None and (not numbers or min(numbers) < 1):
@@ -204,8 +239,9 @@ def chapter_files(stem, number, exports):
     return found
 
 
-def page(selected="", choice="", message="", fmt="epub"):
+def page(selected="", choice="", message="", fmt="epub", mode="translate"):
     fmt = fmt if fmt in FORMATS else "epub"
+    mode = mode if mode in MODES else "translate"
     novels = novel_files()
     current = next((p for p in novels if f"input/{p.name}" == selected), novels[0] if novels else None)
     novel_options = "".join(
@@ -248,7 +284,10 @@ def page(selected="", choice="", message="", fmt="epub"):
                 file_cell += f"<br><i class='muted'>belum ada {fmt}</i>"
         else:
             file_cell = "belum diekspor"
-        label = "berjalan" if running and r["status"] == "in_progress" else STATUS_TEXT.get(r["status"], r["status"])
+        if running and r["status"] == "in_progress":
+            label = "<span class='spin'></span>berjalan"
+        else:
+            label = STATUS_TEXT.get(r["status"], r["status"])
         table += (
             f'<tr><td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
             f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
@@ -256,33 +295,52 @@ def page(selected="", choice="", message="", fmt="epub"):
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
     listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
-    format_js = f"location.href='/?input={input_param}&g={url_quote(choice)}&f='+this.value"
-    format_radios = "".join(
-        f'<label><input type="radio" name="fmt" value="{f}"'
-        f'{" checked" if f == fmt else ""} onchange="{format_js}"> {f.upper()}</label>'
+
+    format_js = f"location.href='/?input={input_param}&g={url_quote(choice)}&m={mode}&f='+this.value"
+    glossary_js = f"location.href='/?input={input_param}&f={fmt}&m={mode}&g='+encodeURIComponent(this.value)"
+    mode_inputs = "".join(
+        f'<input type="radio" id="m-{key}" name="mode" value="{key}"'
+        f'{" checked" if key == mode else ""} onchange="setMode(this.value)">'
+        f'<label for="m-{key}">{text}</label>'
+        for key, text in MODE_LABELS
+    )
+    format_inputs = "".join(
+        f'<input type="radio" id="f-{f}" name="fmt" value="{f}"'
+        f'{" checked" if f == fmt else ""} onchange="{format_js}">'
+        f'<label for="f-{f}">{f.upper()}</label>'
         for f in FORMATS
     )
 
     summary = progress_summary(rows)
+    spinner = "<span class='spin'></span>" if running else ""
     if rows and summary["total"]:
+        run_class = "running" if running else ""
+        current_line = (
+            f"<p class='muted'>{spinner}Sedang: {html.escape(summary['current'])}</p>"
+            if running and summary["current"] else ""
+        )
         progress_block = (
-            "<section><h3>Progres</h3>"
-            f"<progress value='{summary['done']}' max='{summary['total']}'></progress>"
-            f"<p class='muted'>{summary['done']}/{summary['total']} chunk ({summary['percent']}%) &middot; "
-            f"{summary['finished']}/{summary['chapters']} chapter selesai</p>"
-            + (f"<p class='muted'>Sedang: {html.escape(summary['current'])}</p>" if summary["current"] else "")
-            + "</section>"
+            f"<section class='{run_class}'><h3>Progres</h3>"
+            f"<div class='bar'><div class='fill' style='width:{summary['percent']}%'></div></div>"
+            f"<p class='muted'>{summary['done']}/{summary['total']} chunk ({summary['percent']}%) "
+            f"&middot; {summary['finished']}/{summary['chapters']} chapter selesai</p>"
+            f"{current_line}</section>"
         )
     elif running:
-        progress_block = "<section><h3>Progres</h3><p class='muted'>Menyiapkan proses...</p></section>"
+        progress_block = (
+            "<section class='running'><h3>Progres</h3>"
+            f"<p class='muted'>{spinner}Menyiapkan proses...</p></section>"
+        )
     else:
         progress_block = ""
 
     state = "berjalan" if running else "berhenti"
     state_class = "run" if running else "idle"
+    dot = "<span class='dot'></span>" if running else ""
     refresh = '<meta http-equiv="refresh" content="10">' if running else ""
+    disabled = " disabled" if running else ""
     status_block = (
-        f"<section><p>Status proses: <span class='{state_class}'>{state}</span></p>"
+        f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
         '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
     )
@@ -292,25 +350,26 @@ def page(selected="", choice="", message="", fmt="epub"):
         + "</section>"
     )
     lock = (
-        "<div class='lock' onclick='toStop()'>Proses sedang berjalan.<br>Tekan Berhenti dulu untuk mengubah pilihan.</div>"
+        "<div class='lock' onclick='toStop()'>Proses sedang berjalan.<br>"
+        "Ketuk untuk menuju tombol Berhenti.</div>"
         if running else ""
     )
-    form_block = f"""<div class="wrap">{lock}<form method="post" action="/start">
-<section>
+    outsec_style = " style='display:none'" if mode == "scan" else ""
+    form_block = f"""<form method="post" action="/start">
+<section class="wrap">{lock}
 <h3>Mulai proses</h3>
 <label>Novel</label>
 <select name="input" onchange="location.href='/?input='+encodeURIComponent(this.value)">{novel_options}</select>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label>
-<div class="opt">
-<label><input type="radio" name="mode" value="translate" checked> Terjemahkan</label>
-<label><input type="radio" name="mode" value="export"> Ekspor chapter selesai (tanpa menerjemahkan)</label>
-<label><input type="radio" name="mode" value="scan"> Scan glosarium saja</label>
+<div class="seg tri">{mode_inputs}<span class="thumb"></span></div>
+<p class="muted" id="modehint">{html.escape(HINTS[mode])}</p>
+<div id="outsec"{outsec_style}>
+<label>Format output</label>
+<div class="seg duo">{format_inputs}<span class="thumb"></span></div>
 </div>
-<label>Format hasil</label>
-<div class="opt">{format_radios}</div>
 <label>Glosarium</label>
-<select name="glossary" onchange="location.href='/?input={input_param}&f={fmt}&g='+encodeURIComponent(this.value)">{options}</select>
+<select name="glossary" onchange="{glossary_js}">{options}</select>
 <input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru">
 {editor}
 </section>
@@ -318,10 +377,11 @@ def page(selected="", choice="", message="", fmt="epub"):
 <h3>Chapter</h3>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
-<button type="submit">Mulai</button>
+<button type="submit"{disabled}>Mulai</button>
 </section>
-</form></div>"""
+</form>"""
     log_block = f'<details id="log"><summary>Log terbaru</summary><pre>{html.escape(tail(JOB_LOG))}</pre></details>'
+    script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -335,7 +395,7 @@ def page(selected="", choice="", message="", fmt="epub"):
 {files_block}
 {form_block}
 {log_block}
-<script>{SCRIPT}</script>
+{script}
 </body></html>"""
 
 
@@ -369,6 +429,7 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("g", [""])[0],
                     query.get("msg", [""])[0],
                     query.get("f", ["epub"])[0],
+                    query.get("m", ["translate"])[0],
                 ),
             )
         elif url.path == "/glossary":
@@ -397,13 +458,12 @@ class Handler(BaseHTTPRequestHandler):
         choice = form.get("glossary", ["__new__"])[0]
         fmt = form.get("fmt", ["epub"])[0]
         fmt = fmt if fmt in FORMATS else "epub"
+        mode = form.get("mode", ["translate"])[0]
+        mode = mode if mode in MODES else "translate"
         try:
             if self.path == "/start":
                 input_path = safe_input(selected)
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
-                mode = form.get("mode", ["translate"])[0]
-                if mode not in ("translate", "export", "scan"):
-                    raise ValueError("mode tidak dikenal")
                 rows = read_chapters(project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 start_job(input_path, numbers, fmt, glossary_name, mode)
@@ -418,7 +478,7 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as exc:
             msg = f"Gagal: {exc}"
         self._redirect(
-            f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&msg={url_quote(msg)}"
+            f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&m={mode}&msg={url_quote(msg)}"
         )
 
 
