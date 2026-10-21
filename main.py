@@ -26,7 +26,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary
+from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary, translate_terms
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -1287,6 +1287,15 @@ def show_status(input_path: Path, project_dir: Path):
     print(f"Total       : {len(chapters)}")
 
 
+def write_scan_progress(project_dir: Path, **data):
+    import json
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "scan_progress.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
 
     config = load_config(project_dir=project_dir)
@@ -1313,19 +1322,22 @@ def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
         max_attempts=config.research_max_attempts,
     )
 
+    chapters = [chapter for chapter in DocumentChapterSplitter().split(document) if chapter.paragraphs]
+    write_scan_progress(project_dir, total=len(chapters), done=0, current="", finished=False)
     found = []
     # shortcut: semua bagian ikut diriset, termasuk halaman non-cerita; penyaringan menyusul
-    for chapter in DocumentChapterSplitter().split(document):
-        if not chapter.paragraphs:
-            continue
+    for index, chapter in enumerate(chapters, start=1):
         print(f"Riset: {chapter.chapter_id} | {chapter.title}")
+        write_scan_progress(project_dir, total=len(chapters), done=index - 1, current=chapter.title, finished=False)
         result = entity_service.process_chapter(
             chapter_id=chapter.chapter_id,
             paragraphs=chapter.paragraphs,
         )
         found.extend((entity.text, entity.entity_type) for entity in result.entities)
+    write_scan_progress(project_dir, total=len(chapters), done=len(chapters), current="", finished=True)
 
-    added = merge_scan_glossary(found, output, document.title)
+    translations = translate_terms(research_client, [name for name, _ in found])
+    added = merge_scan_glossary(found, output, document.title, translations)
     print(f"Glosarium: {output} | entri baru: {added}")
 
 

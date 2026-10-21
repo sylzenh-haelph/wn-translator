@@ -10,11 +10,14 @@ from ui.server import (
     build_command,
     chapter_files,
     clean_output_name,
+    disposition,
+    download_name,
     progress_summary,
     project_for,
     read_chapters,
     resolve_glossary,
     safe_input,
+    scan_bar,
     start_job,
 )
 
@@ -44,6 +47,23 @@ def test_progress_summary_counts_chunks_and_chapters():
     assert (s["done"], s["total"], s["percent"]) == (5, 8, 62)
     assert (s["finished"], s["chapters"], s["current"]) == (1, 3, "B")
     assert progress_summary([])["percent"] == 0
+
+
+def test_scan_bar_shows_chapter_progress():
+    markup = scan_bar({"total": 4, "done": 1, "current": "Bab A", "finished": False})
+    assert "1/4 chapter (25%)" in markup
+    assert "Sedang: Bab A" in markup
+
+
+def test_download_name_has_novel_title_and_chapter_number():
+    assert download_name("temp/Tidak Ada_chapters/chapter-03.epub", Path("x.epub")) == "Tidak Ada - Chapter 03.epub"
+    assert download_name("temp/mt_v15.epub", Path("temp/mt_v15.epub")) == "mt_v15.epub"
+
+
+def test_disposition_is_latin1_safe():
+    header = disposition("Bab ’3’.epub")
+    header.encode("latin-1")
+    assert "filename*=UTF-8''" in header
 
 
 def test_paths_from_browser_are_checked():

@@ -1,5 +1,15 @@
+import json
 import re
 from pathlib import Path
+
+
+TERM_PROMPT = (
+    "Kamu menyusun glosarium terjemahan novel fantasi dari bahasa Inggris ke Indonesia. "
+    "Untuk setiap istilah, berikan arti Indonesia yang paling tepat dan lazim dipakai pembaca novel terjemahan. "
+    "Nama orang dan nama tempat yang lazim tetap ditulis seperti aslinya. "
+    "Gelar, organisasi, nama benda, dan nama skill diterjemahkan. "
+    "Jawab HANYA JSON berupa objek: kunci = istilah asli persis seperti yang diberikan, nilai = arti Indonesia."
+)
 
 
 def load_glossary(path):
@@ -36,8 +46,63 @@ def apply_glossary(text, pairs):
     return pattern.sub(lambda m: table[m.group(1).lower()], text)
 
 
-def merge_scan_glossary(entries, path, title):
+def _words(name):
+    return tuple(re.findall(r"[a-z0-9]+", name.lower()))
+
+
+def _contains(longer, shorter):
+    n, m = len(longer), len(shorter)
+    return m < n and any(longer[i:i + m] == shorter for i in range(n - m + 1))
+
+
+def prune_scan_names(entries, existing_names):
+    # shortcut: pembandingan per kata; ejaan beda tanpa kata yang sama (mis. 'Manggod' vs 'Man-God') belum digabung
+    items, seen = [], set()
+    for name, kind in entries:
+        clean = name.strip()
+        key = _words(clean)
+        if clean and key and key not in seen:
+            seen.add(key)
+            items.append((clean, kind, key))
+
+    existing = [_words(name) for name in existing_names]
+    keep = []
+    for clean, kind, key in items:
+        if key in existing:
+            continue
+        if any(_contains(other, key) for _, _, other in items if other != key):
+            continue
+        if any(_contains(old, key) for old in existing):
+            continue
+        keep.append((clean, kind))
+    return keep
+
+
+def translate_terms(client, names):
+    """Minta model memberi arti Indonesia. Kalau gagal, hasilnya kosong dan scan tetap jalan."""
+    from translation.model_client import extract_json
+
+    unique = list(dict.fromkeys(name.strip() for name in names if name.strip()))
+    if not unique:
+        return {}
+    prompt = TERM_PROMPT + "\n\nISTILAH:\n" + json.dumps(unique, ensure_ascii=False)
+    try:
+        data = extract_json(client.generate(prompt))
+    except Exception as exc:
+        print(f"Arti otomatis dilewati: {exc}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        str(key).strip().lower(): str(value).strip()
+        for key, value in data.items()
+        if str(value).strip()
+    }
+
+
+def merge_scan_glossary(entries, path, title, translations=None):
     # Tambah entri baru saja. Yang sudah ada (termasuk isian Indonesia dan komentar) tidak diubah.
+    translations = translations or {}
     path = Path(path)
     if path.exists():
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -48,18 +113,17 @@ def merge_scan_glossary(entries, path, title):
             "",
         ]
 
-    known = set()
+    existing = []
     for line in lines:
         text = line.strip()
         if text and not text.startswith("#") and "=" in text:
-            known.add(text.split("=", 1)[0].strip().lower())
+            existing.append(text.split("=", 1)[0].strip())
+    known = {name.lower() for name in existing}
 
+    fresh = [(name, kind) for name, kind in entries if name.strip().lower() not in known]
     by_kind = {}
-    for name, kind in entries:
-        clean = name.strip()
-        if clean and clean.lower() not in known:
-            known.add(clean.lower())
-            by_kind.setdefault(kind or "lainnya", []).append(clean)
+    for name, kind in prune_scan_names(fresh, existing):
+        by_kind.setdefault(kind or "lainnya", []).append(name)
 
     section_end = {}
     current = None
@@ -74,7 +138,10 @@ def merge_scan_glossary(entries, path, title):
     tail = []
     inserts = []
     for kind in sorted(by_kind):
-        new_lines = [f"{name} = " for name in sorted(by_kind[kind], key=str.lower)]
+        new_lines = [
+            f"{name} = {translations.get(name.lower(), '')}".rstrip()
+            for name in sorted(by_kind[kind], key=str.lower)
+        ]
         if kind in section_end:
             inserts.append((section_end[kind], new_lines))
         else:

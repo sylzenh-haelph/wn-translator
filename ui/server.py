@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import zipfile
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +22,7 @@ PORT = 8765
 JOB = "wn_ui_job"
 DOWNLOAD = Path("/storage/emulated/0/Download")
 JOB_LOG = ROOT / "temp" / "ui_job.log"
+JOB_MODE = ROOT / "temp" / "ui_job_mode.txt"
 STATUS_TEXT = {"not_started": "belum mulai", "in_progress": "belum selesai", "completed": "selesai"}
 INPUT_SUFFIXES = {".epub", ".docx"}
 FORMATS = ("epub", "docx")
@@ -66,6 +68,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 @keyframes spin{to{transform:rotate(360deg)}}
 .rowbox{display:flex;gap:8px;align-items:center}
 .rowbox input{flex:1}
+.sub{color:var(--muted);font-size:15px;margin:-4px 0 14px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -146,6 +149,63 @@ function renameGlossary(){
   if(y){window.scrollTo(0,parseInt(y,10));}
 })();
 """
+
+
+def scan_progress(project):
+    path = project / "scan_progress.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    return data if data.get("total") else None
+
+
+def scan_bar(state):
+    total = state.get("total", 0)
+    done = state.get("done", 0)
+    percent = round(100 * done / total) if total else 0
+    text = f"{done}/{total} chapter ({percent}%)"
+    current = state.get("current", "")
+    if current and not state.get("finished"):
+        text += f" &middot; Sedang: {html.escape(current)}"
+    return (
+        "<section class='running'><h3>Progres scan</h3>"
+        f"<div class='bar'><div class='fill' style='width:{percent}%'></div></div>"
+        f"<p class='muted'>{text}</p></section>"
+    )
+
+
+def novel_title(stem):
+    for path in (ROOT / "input").glob(f"{stem}.epub"):
+        try:
+            with zipfile.ZipFile(path) as archive:
+                for name in archive.namelist():
+                    if name.lower().endswith(".opf"):
+                        text = archive.read(name).decode("utf-8", "ignore")
+                        match = re.search(r"<dc:title[^>]*>([^<]+)</dc:title>", text)
+                        if match:
+                            return html.unescape(match.group(1)).strip()
+        except (OSError, zipfile.BadZipFile):
+            return None
+    return None
+
+
+def download_name(key, target):
+    match = re.match(r"temp/(.+)_chapters/chapter-(\d+)\.(epub|docx)$", key)
+    if not match:
+        return target.name
+    stem, number, ext = match.group(1), int(match.group(2)), match.group(3)
+    title = novel_title(stem) or stem
+    safe = re.sub(r'[\\/:*?"<>|]+', " ", title)
+    safe = re.sub(r"\s+", " ", safe).strip()
+    return f"{safe} - Chapter {number:02d}.{ext}"
+
+
+def disposition(name):
+    ascii_name = name.encode("ascii", "replace").decode("ascii").replace('"', "")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{url_quote(name)}"
 
 
 def safe_input(value):
@@ -289,6 +349,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
         raise RuntimeError("masih ada proses yang berjalan")
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    JOB_MODE.write_text(mode, encoding="utf-8")
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
@@ -365,6 +426,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     input_param = url_quote(f"input/{current.name}") if current else ""
     rows = read_chapters(project_for(current)) if current else []
     running = job_running()
+    job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
     exports = files()
 
     table = ""
@@ -412,7 +474,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 
     summary = progress_summary(rows)
     spinner = "<span class='spin'></span>" if running else ""
-    if rows and summary["total"]:
+    scan_state = scan_progress(project_for(current)) if (running and job_mode == "scan" and current) else None
+    if scan_state:
+        progress_block = scan_bar(scan_state)
+    elif rows and summary["total"] and not (running and job_mode == "scan"):
         run_class = "running" if running else ""
         current_line = (
             f"<p class='muted'>{spinner}Sedang: {html.escape(summary['current'])}</p>"
@@ -497,10 +562,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh}
-<title>WN Translator</title>
+<title>Converise EN»ID</title>
 <style>{STYLE}{EXTRA_STYLE}</style>
 </head><body>
-<h1>WN Translator</h1>
+<h1>Converise EN»ID</h1>
+<p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
 {progress_block}
 {files_block}
@@ -555,7 +621,7 @@ class Handler(BaseHTTPRequestHandler):
                     200,
                     target.read_bytes(),
                     MIME.get(target.suffix.lower()[1:], "application/octet-stream"),
-                    {"Content-Disposition": f'attachment; filename="{target.name}"'},
+                    {"Content-Disposition": disposition(download_name(unquote(url.path[len("/file/"):]), target))},
                 )
         else:
             self._send(404, "tidak ditemukan")
