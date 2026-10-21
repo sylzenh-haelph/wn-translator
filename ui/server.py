@@ -79,6 +79,7 @@ details pre{max-height:320px;overflow:auto}
 .bar.tick{box-shadow:0 0 0 3px rgba(129,201,149,.45);transition:box-shadow .3s}
 .gain{color:var(--ok);font-size:14px;font-weight:bold;margin-top:4px;animation:gain 2.6s ease forwards}
 @keyframes gain{0%{opacity:0;transform:translateY(4px)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+select{width:100%;font-size:17px;padding:10px 12px;margin:6px 0;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -280,6 +281,30 @@ def chunk_hint(rows, running, project):
     )
 
 
+def chunk_totals(input_path, project):
+    path = project / "chunk_totals.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    from main import DocumentChapterSplitter, parse_document
+    from translation.chunker import build_chunks
+
+    document = parse_document(input_path)
+    totals = {}
+    for chapter in DocumentChapterSplitter().split(document):
+        if chapter.paragraphs:
+            totals[chapter.chapter_id] = len(build_chunks(chapter.paragraphs))
+    project.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(totals), encoding="utf-8")
+    return totals
+
+
+def chunk_totals_safe(input_path, project):
+    try:
+        return chunk_totals(input_path, project)
+    except Exception:
+        return None
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -365,10 +390,13 @@ def read_chapters(project):
     return rows
 
 
-def progress_summary(rows):
-    # shortcut: total chunk hanya dari chapter yang sudah punya progres; chapter yang belum mulai belum ikut
+def progress_summary(rows, totals=None):
+    # Total semua chapter kalau daftar chunk tersedia; kalau tidak, hanya dari chapter yang sudah punya progres.
     done = sum(r["done"] for r in rows)
-    total = sum(r["total"] for r in rows)
+    if totals:
+        total = sum(totals.get(r["id"], r["total"]) for r in rows)
+    else:
+        total = sum(r["total"] for r in rows)
     return {
         "done": done,
         "total": total,
@@ -402,7 +430,9 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
         f"python -u main.py {source} {args} "
-        f"2>&1 | tee -a {quote(str(JOB_LOG))}; echo SELESAI; sleep 3600"
+        f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
+        f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
+        "termux-wake-unlock 2>/dev/null"
     )
 
 
@@ -571,12 +601,13 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         for f in FORMATS
     )
 
-    summary = progress_summary(rows)
+    totals = chunk_totals_safe(current, project_for(current)) if (running and current) else None
+    summary = progress_summary(rows, totals)
     spinner = "<span class='spin'></span>" if running else ""
     scan_state = scan_progress(project_for(current)) if (running and job_mode == "scan" and current) else None
     if scan_state:
         progress_block = scan_bar(scan_state, stem)
-    elif rows and summary["total"] and not (running and job_mode == "scan"):
+    elif running and rows and summary["total"] and job_mode != "scan":
         run_class = "running" if running else ""
         current_line = (
             f"<p class='muted'>{spinner}Sedang: {html.escape(summary['current'])}</p>"
@@ -618,6 +649,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         if running else ""
     )
     outsec_style = " style='display:none'" if mode == "scan" else ""
+    log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
 <section class="wrap">{lock}
 <h3>Mulai proses</h3>
@@ -648,6 +680,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 {editor}
 </section>
+{log_block}
 <section>
 <h3>Chapter</h3>
 {notice}
@@ -655,7 +688,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <button type="submit"{disabled}>Mulai</button>
 </section>
 </form>"""
-    log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -668,9 +700,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
 {progress_block}
-{files_block}
 {form_block}
-{log_block}
+{files_block}
 {script}
 </body></html>"""
 

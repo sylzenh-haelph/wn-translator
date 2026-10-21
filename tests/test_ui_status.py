@@ -171,3 +171,28 @@ def test_chunk_hint_points_to_latest_active_chapter(tmp_path):
     assert "Baru" in markup
     assert "chunk 3/8" in markup
     assert chunk_hint(rows, False, tmp_path) == ""
+
+
+
+def test_progress_summary_uses_all_chapter_totals():
+    from ui.server import progress_summary
+
+    rows = [
+        {"id": "chapter_002", "title": "A", "status": "completed", "done": 4, "total": 4},
+        {"id": "chapter_003", "title": "B", "status": "not_started", "done": 0, "total": 0},
+    ]
+    s = progress_summary(rows, {"chapter_002": 4, "chapter_003": 6})
+    assert (s["done"], s["total"], s["percent"]) == (4, 10, 40)
+
+
+def test_chunk_totals_reads_cached_file(tmp_path):
+    from ui.server import chunk_totals
+
+    (tmp_path / "chunk_totals.json").write_text('{"chapter_002": 5}', encoding="utf-8")
+    assert chunk_totals(Path("input/x.epub"), tmp_path) == {"chapter_002": 5}
+
+
+def test_build_command_stops_without_sleep():
+    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000")
+    assert "sleep" not in cmd
+    assert "SELESAI" in cmd
