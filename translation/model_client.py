@@ -13,6 +13,25 @@ class ModelProviderError(RuntimeError):
         self.status_code = status_code
 
 
+def _count_request(model):
+    # shortcut: hanya aktif kalau WN_USAGE_FILE diset (lewat UI), supaya tes dan CLI tidak menulis file
+    path = os.environ.get("WN_USAGE_FILE", "").strip()
+    if not path:
+        return
+    from datetime import datetime
+    from pathlib import Path
+
+    file = Path(path)
+    try:
+        data = json.loads(file.read_text(encoding="utf-8")) if file.exists() else {}
+    except ValueError:
+        data = {}
+    day = data.setdefault(datetime.now().strftime("%Y-%m-%d"), {})
+    day[model] = day.get(model, 0) + 1
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 class GeminiClient:
     RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -76,6 +95,7 @@ class GeminiClient:
 
         for attempt in range(self.max_retries + 1):
             try:
+                _count_request(self.model)
                 response = requests.post(
                     self.url,
                     headers=headers,

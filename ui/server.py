@@ -343,6 +343,26 @@ def chunk_totals_safe(input_path, project):
         return None
 
 
+def usage_today():
+    path = ROOT / "temp" / "usage_counts.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    # shortcut: dihitung per hari lokal; kuota Gemini reset mengikuti zona waktu Pasifik, jadi angkanya perkiraan
+    return data.get(datetime.now().strftime("%Y-%m-%d"), {})
+
+
+def usage_line():
+    counts = usage_today()
+    if not counts:
+        return "Panggilan model hari ini: belum ada"
+    parts = " · ".join(f"{html.escape(model)} {count}x" for model, count in sorted(counts.items()))
+    return f"Panggilan model hari ini: {parts}"
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -465,7 +485,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
-    env = "WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else "")
+    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
         f"{env}python -u main.py {source} {args} "
@@ -688,6 +708,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     status_block = (
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
+        f"<p class='muted'>{usage_line()}</p>"
         '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
     )
     files_block = (

@@ -139,10 +139,9 @@ def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
     assert refinement_client.provider == "gemini"
     assert refinement_client.model == "refinement-model"
 
-    assert (
-        processor.retry_controller.refinement_engine.client
-        is refinement_client
-    )
+    wrapper = processor.retry_controller.refinement_engine.client
+    assert wrapper.clients == [refinement_client]
+    assert wrapper.labels == ["gemini:refinement-model"]
     translation_engine_client = (
         processor.retry_controller.translation_engine.client
     )

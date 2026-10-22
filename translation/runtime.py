@@ -119,13 +119,14 @@ def build_chapter_processor(
         client=translation_client,
     )
 
-    refinement_client = create_model_client(
-        provider=config.refinement_provider,
-        model=config.refinement_model,
-        api_key=config.get_api_key(config.refinement_provider),
+    refinement_client = build_failover_client(
+        config,
+        role="Refinement",
+        primary_provider=config.refinement_provider,
+        primary_model=config.refinement_model,
+        fallbacks=config.translation_fallbacks,
         max_retries=config.max_retries,
         timeout=config.timeout,
-        backoff_base=config.backoff_base,
     )
 
     refinement_engine = RefinementEngine(
