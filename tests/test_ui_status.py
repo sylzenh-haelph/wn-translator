@@ -206,3 +206,12 @@ def test_build_command_can_skip_research():
 def test_build_command_sets_title_cache():
     cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000")
     assert "WN_TITLE_CACHE=temp/title_cache.json python" in cmd
+
+
+def test_render_log_has_copy_button(tmp_path, monkeypatch):
+    import ui.server as server
+
+    log = tmp_path / "job.log"
+    log.write_text("===== MULAI translate · x · EPUB · 01-01 00:00 =====\na\n", encoding="utf-8")
+    monkeypatch.setattr(server, "JOB_LOG", log)
+    assert "copyLog(this)" in server.render_log()

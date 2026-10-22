@@ -94,10 +94,24 @@ details.cfg[open]>summary::before{content:"▾ ";color:var(--accent)}
 details.cfg.locked>*:not(summary){opacity:.45;pointer-events:none;filter:grayscale(.6)}
 .fabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:10px 12px;background:rgba(18,18,18,.94);border-top:1px solid var(--line)}
 .fabbar button{width:100%;font-size:18px;padding:12px}
+.copy{font-size:13px;padding:4px 10px;margin:4px 0}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
 SCRIPT = """
+function copyLog(btn){
+  var title=btn.parentNode.querySelector('summary').textContent;
+  var text=title+'\n'+btn.nextElementSibling.textContent;
+  var done=function(){btn.textContent='Tersalin';setTimeout(function(){btn.textContent='Salin log';},1500);};
+  function fallback(){
+    var t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';
+    document.body.appendChild(t);t.select();
+    try{document.execCommand('copy');done();}catch(e){btn.textContent='Gagal';}
+    document.body.removeChild(t);
+  }
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done,fallback);}
+  else{fallback();}
+}
 function toStop(){
   var b=document.getElementById('stop-btn');
   if(!b){return;}
@@ -504,6 +518,7 @@ def render_log(lines=400):
         body = html.escape("\n".join(session["body"]))
         markup.append(
             f"<details class='sess'{opened}><summary>{html.escape(session['title'])}</summary>"
+            "<button type='button' class='copy' onclick='copyLog(this)'>Salin log</button>"
             f"<pre>{body}</pre></details>"
         )
     return "".join(markup)
