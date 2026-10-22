@@ -196,3 +196,8 @@ def test_build_command_stops_without_sleep():
     cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000")
     assert "sleep" not in cmd
     assert "SELESAI" in cmd
+
+
+def test_build_command_can_skip_research():
+    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000", "", True)
+    assert "WN_RESEARCH_ENABLED=0 python" in cmd

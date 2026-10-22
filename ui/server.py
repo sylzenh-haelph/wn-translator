@@ -425,7 +425,7 @@ def job_running():
     return subprocess.run(["tmux", "has-session", "-t", JOB], capture_output=True).returncode == 0
 
 
-def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name=""):
+def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", skip_research=False):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
     glossary = quote(f"glossary/{glossary_name}")
@@ -441,16 +441,17 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
+    env = "WN_RESEARCH_ENABLED=0 " if skip_research else ""
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
-        f"python -u main.py {source} {args} "
+        f"{env}python -u main.py {source} {args} "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
         f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
         "termux-wake-unlock 2>/dev/null"
     )
 
 
-def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
+def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_research=False):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
@@ -467,7 +468,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     log_marker(f"MULAI {mode} · {input_path.name} · {fmt.upper()}")
     JOB_MODE.write_text(mode, encoding="utf-8")
-    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
+    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
@@ -698,6 +699,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 </div>
 {editor}
+<div class='opt'><label><input type='checkbox' name='norisk' value='1'> Lewati riset entitas (pakai glosarium apa adanya, hemat kuota)</label></div>
 </details>
 {log_block}
 <section>
@@ -804,7 +806,8 @@ class Handler(BaseHTTPRequestHandler):
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 rows = read_chapters(project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
-                start_job(input_path, numbers, fmt, glossary_name, mode, out_name)
+                skip = form.get("norisk", [""])[0] == "1"
+                start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
                 choice = glossary_name
                 msg = "Proses dimulai."
             elif self.path == "/stop":

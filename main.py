@@ -1322,7 +1322,8 @@ def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
         max_attempts=config.research_max_attempts,
     )
 
-    chapters = [chapter for chapter in DocumentChapterSplitter().split(document) if chapter.paragraphs]
+    # shortcut: bagian sangat pendek (sampul, daftar isi, promo) dilewati supaya tidak memakai panggilan riset
+    chapters = [chapter for chapter in DocumentChapterSplitter().split(document) if len(chapter.paragraphs) >= 10]
     write_scan_progress(project_dir, total=len(chapters), done=0, current="", finished=False)
     found = []
     # shortcut: semua bagian ikut diriset, termasuk halaman non-cerita; penyaringan menyusul
