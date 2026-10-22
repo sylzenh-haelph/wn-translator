@@ -741,7 +741,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
-        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form><form method="post" action="/backup" style="display:inline"><button type="submit">Backup data</button></form></section>'
+        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
     )
     files_block = (
         "<section><h3>File hasil</h3>"
@@ -805,6 +805,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {progress_block}
 {form_block}
 {files_block}
+<section><h3>Data</h3><p class='muted'>Salin glosarium dan progres semua novel ke Download/wn_backup.</p><form method="post" action="/backup" onsubmit="return confirm('Buat backup sekarang?')"><button type="submit">Backup data</button></form></section>
 {fabbar}
 {script}
 </body></html>"""
