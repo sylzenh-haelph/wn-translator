@@ -516,7 +516,7 @@ def tail(path, lines=40):
 
 def files():
     found = {}
-    for folder in (ROOT / "temp", DOWNLOAD):
+    for folder in (ROOT / "temp",):
         if folder.exists():
             for f in sorted(folder.glob("*.epub")) + sorted(folder.glob("*.docx")):
                 found[f"{folder.name}/{f.name}"] = f
