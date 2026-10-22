@@ -441,7 +441,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
-    env = "WN_RESEARCH_ENABLED=0 " if skip_research else ""
+    env = "WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else "")
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
         f"{env}python -u main.py {source} {args} "

@@ -1,8 +1,34 @@
 from __future__ import annotations
 
+import json
+import os
 import re
+from pathlib import Path
 
 from translation.model_client import extract_json
+
+
+def _cache_file():
+    value = os.environ.get("WN_TITLE_CACHE", "").strip()
+    return Path(value) if value else None
+
+
+def _load_title_cache(path):
+    if path is None or not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+
+
+def _save_title_cache(path, title, translated):
+    if path is None:
+        return
+    data = _load_title_cache(path)
+    data[title] = translated
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 class ChapterTitleTranslator:
@@ -68,6 +94,11 @@ Expected JSON:
             number = label_only.group(1)
             return f"Chapter {number} (Bab {number})"
 
+        # shortcut: kunci cache hanya judul asli; dua novel dengan judul sama memakai terjemahan yang sama
+        cached = _load_title_cache(_cache_file()).get(title.strip())
+        if cached:
+            return cached
+
         entities = []
 
         for entity in entity_resolutions or []:
@@ -100,6 +131,7 @@ Translate the chapter title now.
             )
 
         self._validate(title, translated_title)
+        _save_title_cache(_cache_file(), title.strip(), translated_title)
 
         return translated_title
 

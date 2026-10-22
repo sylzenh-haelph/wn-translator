@@ -201,3 +201,8 @@ def test_build_command_stops_without_sleep():
 def test_build_command_can_skip_research():
     cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000", "", True)
     assert "WN_RESEARCH_ENABLED=0 python" in cmd
+
+
+def test_build_command_sets_title_cache():
+    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000")
+    assert "WN_TITLE_CACHE=temp/title_cache.json python" in cmd
