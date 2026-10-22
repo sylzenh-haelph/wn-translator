@@ -84,6 +84,15 @@ select{width:100%;font-size:17px;padding:10px 12px;margin:6px 0;background:var(-
 .rowbox.head h3{margin:0}
 details.sess{margin:8px 0;padding:6px 8px;background:var(--bg)}
 details.sess summary{font-size:14px;font-weight:normal;color:var(--accent)}
+body{background:linear-gradient(120deg,#121212,#1a2030,#121212,#152420);background-size:300% 300%;animation:bgshift 18s ease infinite;padding-bottom:84px}
+@keyframes bgshift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+details.cfg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
+details.cfg>summary{font-size:18px;font-weight:bold;cursor:pointer;list-style:none;margin-bottom:6px}
+details.cfg>summary::-webkit-details-marker{display:none}
+details.cfg>summary::before{content:"▸ ";color:var(--accent)}
+details.cfg[open]>summary::before{content:"▾ ";color:var(--accent)}
+.fabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:10px 12px;background:rgba(18,18,18,.94);border-top:1px solid var(--line)}
+.fabbar button{width:100%;font-size:18px;padding:12px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -644,6 +653,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     dot = "<span class='dot'></span>" if running else ""
     refresh = '<meta http-equiv="refresh" content="10">' if running else ""
     disabled = " disabled" if running else ""
+    cfg_open = "" if running else " open"
+    fabbar = f"<div class='fabbar'><button type='submit' form='mainform'{disabled}>Mulai</button></div>"
     status_block = (
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
@@ -654,16 +665,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         + (f"<ul>{listing}</ul>" if listing else "<p class='muted'>Belum ada file hasil.</p>")
         + "</section>"
     )
-    lock = (
-        "<div class='lock' onclick='toStop()'>Proses sedang berjalan.<br>"
-        "Ketuk untuk menuju tombol Berhenti.</div>"
-        if running else ""
-    )
     outsec_style = " style='display:none'" if mode == "scan" else ""
     log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
-<section class="wrap">{lock}
-<h3>Mulai proses</h3>
+<details class="cfg"{cfg_open}>
+<summary>Mulai proses</summary>
 <label>Novel</label>
 <select name="input" onchange="go('input='+encodeURIComponent(this.value))">{novel_options}</select>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
@@ -690,10 +696,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 </div>
 {editor}
-</section>
+</details>
 {log_block}
 <section>
-<div class='rowbox head'><h3>Chapter</h3><button type="submit"{disabled}>Mulai</button></div>
+<div class='rowbox head'><h3>Chapter</h3></div>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>
@@ -712,6 +718,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {progress_block}
 {form_block}
 {files_block}
+{fabbar}
 {script}
 </body></html>"""
 
