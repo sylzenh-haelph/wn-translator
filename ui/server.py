@@ -95,6 +95,12 @@ details.cfg.locked>*:not(summary){opacity:.45;pointer-events:none;filter:graysca
 .fabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:10px 12px;background:rgba(18,18,18,.94);border-top:1px solid var(--line)}
 .fabbar button{width:100%;font-size:18px;padding:12px}
 .copy{font-size:13px;padding:4px 10px;margin:4px 0}
+.switch{display:flex;align-items:center;gap:10px;margin:8px 0;cursor:pointer;color:var(--fg);font-size:17px}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.slider{position:relative;width:46px;height:26px;border-radius:999px;background:var(--line);transition:background .3s;flex:none}
+.slider::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#e8e8e8;transition:transform .3s}
+.switch input:checked + .slider{background:var(--accent)}
+.switch input:checked + .slider::after{transform:translateX(20px)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -122,6 +128,8 @@ function toStop(){
 function setMode(v){
   var out=document.getElementById('outsec');
   if(out){out.style.display=(v==='scan')?'none':'';}
+  var rs=document.getElementById('rsec');
+  if(rs){rs.style.display=(v==='scan')?'none':'';}
   var h=document.getElementById('modehint');
   if(h){h.textContent=HINTS[v]||'';}
 }
@@ -152,6 +160,8 @@ function go(extra){
   var o=document.getElementById('out_name');
   var q='&m='+(m?m.value:'translate')+'&f='+(f?f.value:'epub');
   if(o&&o.value){q+='&o='+encodeURIComponent(o.value);}
+  var rs=document.querySelector('input[name=research]');
+  q+='&rs='+(rs&&!rs.checked?'0':'1');
   location.href='/?'+extra+q;
 }
 function renameGlossary(){
@@ -552,14 +562,14 @@ def chapter_files(stem, number, exports):
     return found
 
 
-def state_location(selected, choice, fmt, mode, out_name, msg):
+def state_location(selected, choice, fmt, mode, out_name, msg, research="1"):
     return (
         f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&m={mode}"
-        f"&o={url_quote(out_name)}&msg={url_quote(msg)}"
+        f"&o={url_quote(out_name)}&rs={research}&msg={url_quote(msg)}"
     )
 
 
-def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name=""):
+def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name="", research="1"):
     fmt = fmt if fmt in FORMATS else "epub"
     mode = mode if mode in MODES else "translate"
     novels = novel_files()
@@ -672,6 +682,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     disabled = " disabled" if running else ""
     cfg_open = "" if running else " open"
     lock_cls = " locked" if running else ""
+    rs_checked = "" if research == "0" else " checked"
+    rs_hidden = " style='display:none'" if mode == "scan" else ""
     fabbar = f"<div class='fabbar'><button type='submit' form='mainform'{disabled}>Mulai</button></div>"
     status_block = (
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
@@ -714,7 +726,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 </div>
 {editor}
-<div class='opt'><label><input type='checkbox' name='norisk' value='1'> Lewati riset entitas (pakai glosarium apa adanya, hemat kuota)</label></div>
+<div id="rsec"{rs_hidden}>
+<label class="switch"><input type="checkbox" name="research" value="1"{rs_checked}><span class="slider"></span><span>Riset entitas</span></label>
+<p class="muted">Aktif: nama dan istilah baru dicari di web lewat Tavily. Matikan untuk hemat kuota; glosarium yang sudah ada tetap dipakai.</p>
+</div>
 </details>
 {log_block}
 <section>
@@ -774,6 +789,7 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("f", ["epub"])[0],
                     query.get("m", ["translate"])[0],
                     query.get("o", [""])[0],
+                    query.get("rs", ["1"])[0],
                 ),
             )
         elif url.path == "/glossary":
@@ -805,6 +821,7 @@ class Handler(BaseHTTPRequestHandler):
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
         out_name = form.get("out_name", [""])[0]
+        research_flag = "1" if (form.get("research", [""])[0] == "1" or mode == "scan") else "0"
 
         if self.path == "/glossary/rename":
             try:
@@ -812,7 +829,7 @@ class Handler(BaseHTTPRequestHandler):
                 msg = f"Glosarium diganti namanya menjadi {choice}."
             except (ValueError, RuntimeError) as exc:
                 msg = f"Gagal: {exc}"
-            self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
+            self._redirect(state_location(selected, choice, fmt, mode, out_name, msg, research_flag))
             return
 
         try:
@@ -821,7 +838,7 @@ class Handler(BaseHTTPRequestHandler):
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 rows = read_chapters(project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
-                skip = form.get("norisk", [""])[0] == "1"
+                skip = research_flag == "0"
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
                 choice = glossary_name
                 msg = "Proses dimulai."
@@ -833,7 +850,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
         except (ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as exc:
             msg = f"Gagal: {exc}"
-        self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
+        self._redirect(state_location(selected, choice, fmt, mode, out_name, msg, research_flag))
 
 
 if __name__ == "__main__":

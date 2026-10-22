@@ -215,3 +215,16 @@ def test_render_log_has_copy_button(tmp_path, monkeypatch):
     log.write_text("===== MULAI translate · x · EPUB · 01-01 00:00 =====\na\n", encoding="utf-8")
     monkeypatch.setattr(server, "JOB_LOG", log)
     assert "copyLog(this)" in server.render_log()
+
+
+def test_state_location_keeps_research_flag():
+    from ui.server import state_location
+
+    loc = state_location("input/a.epub", "g", "epub", "translate", "", "ok", "0")
+    assert "&rs=0" in loc
+
+
+def test_research_switch_is_rendered():
+    from ui.server import page
+
+    assert 'name="research"' in page()
