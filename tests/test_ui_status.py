@@ -229,3 +229,40 @@ def test_research_switch_is_rendered():
     from ui.server import page
 
     assert 'name="research"' in page()
+
+
+def test_read_chapters_falls_back_to_backup(tmp_path):
+    from ui.server import read_chapters
+
+    (tmp_path / 'progress').mkdir()
+    (tmp_path / 'chapters.json').write_text('[{"id": "chapter_002", "title": "A"}]', encoding='utf-8')
+    (tmp_path / 'progress' / 'chapter_002.json').write_text('{rusak', encoding='utf-8')
+    (tmp_path / 'progress' / 'chapter_002.json.bak').write_text(
+        '{"status": "completed", "chunks": {"c0": {"qa_passed": true}}}', encoding='utf-8')
+    row = read_chapters(tmp_path)[0]
+    assert row['status'] == 'completed'
+    assert row['done'] == 1
+
+
+def test_read_chapters_survives_corrupt_progress(tmp_path):
+    from ui.server import read_chapters
+
+    (tmp_path / 'progress').mkdir()
+    (tmp_path / 'chapters.json').write_text('[{"id": "chapter_002", "title": "A"}]', encoding='utf-8')
+    (tmp_path / 'progress' / 'chapter_002.json').write_text('{rusak', encoding='utf-8')
+    row = read_chapters(tmp_path)[0]
+    assert row['status'] == 'not_started'
+
+
+def test_backup_copies_glossary_and_progress(tmp_path, monkeypatch):
+    import ui.server as server
+
+    monkeypatch.setattr(server, 'ROOT', tmp_path / 'proj')
+    monkeypatch.setattr(server, 'DOWNLOAD', tmp_path / 'dl')
+    (tmp_path / 'proj' / 'glossary').mkdir(parents=True)
+    (tmp_path / 'proj' / 'glossary' / 'a.txt').write_text('Eris = Eris', encoding='utf-8')
+    (tmp_path / 'proj' / 'temp' / 'x_project' / 'progress').mkdir(parents=True)
+    (tmp_path / 'proj' / 'temp' / 'x_project' / 'progress' / 'chapter_002.json').write_text('{}', encoding='utf-8')
+    target = server.backup_data()
+    assert (target / 'glossary' / 'a.txt').exists()
+    assert (target / 'x_project' / 'progress' / 'chapter_002.json').exists()

@@ -363,6 +363,21 @@ def usage_line():
     return f"Panggilan model hari ini: {parts}"
 
 
+def backup_data():
+    import shutil
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    target = DOWNLOAD / "wn_backup" / stamp
+    target.mkdir(parents=True, exist_ok=True)
+    if (ROOT / "glossary").exists():
+        shutil.copytree(ROOT / "glossary", target / "glossary", dirs_exist_ok=True)
+    for project in sorted((ROOT / "temp").glob("*_project")):
+        progress = project / "progress"
+        if progress.exists():
+            shutil.copytree(progress, target / project.name / "progress", dirs_exist_ok=True)
+    return target
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -430,20 +445,37 @@ def project_for(input_path):
     return Path(f"temp/{input_path.stem}_project")
 
 
+def load_progress(progress_dir, chapter_id):
+    for name in (f"{chapter_id}.json", f"{chapter_id}.json.bak"):
+        path = progress_dir / name
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
 def read_chapters(project):
     listing = project / "chapters.json"
     if not listing.exists():
         return []
+    try:
+        items = json.loads(listing.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return []
     rows = []
-    for item in json.loads(listing.read_text(encoding="utf-8")):
+    for item in items:
         status, done, total = "not_started", 0, 0
-        progress = project / "progress" / f"{item['id']}.json"
-        if progress.exists():
-            data = json.loads(progress.read_text(encoding="utf-8"))
+        data = load_progress(project / "progress", item["id"])
+        if data is not None:
             status = data.get("status", "not_started")
-            chunks = data.get("chunks", {})
+            chunks = data.get("chunks") if isinstance(data.get("chunks"), dict) else {}
             total = len(chunks)
-            done = sum(1 for c in chunks.values() if c.get("qa_passed") is True)
+            done = sum(1 for c in chunks.values() if isinstance(c, dict) and c.get("qa_passed") is True)
         rows.append({"id": item["id"], "title": item["title"], "status": status, "done": done, "total": total})
     return rows
 
@@ -709,7 +741,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
-        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
+        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form><form method="post" action="/backup" style="display:inline"><button type="submit">Backup data</button></form></section>'
     )
     files_block = (
         "<section><h3>File hasil</h3>"
@@ -863,6 +895,8 @@ class Handler(BaseHTTPRequestHandler):
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
                 choice = glossary_name
                 msg = "Proses dimulai."
+            elif self.path == "/backup":
+                msg = f"Backup disimpan di {backup_data()}"
             elif self.path == "/stop":
                 stop_job()
                 msg = "Proses dihentikan."
