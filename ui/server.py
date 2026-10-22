@@ -84,13 +84,14 @@ select{width:100%;font-size:17px;padding:10px 12px;margin:6px 0;background:var(-
 .rowbox.head h3{margin:0}
 details.sess{margin:8px 0;padding:6px 8px;background:var(--bg)}
 details.sess summary{font-size:14px;font-weight:normal;color:var(--accent)}
-body{background:linear-gradient(120deg,#121212,#1a2030,#121212,#152420);background-size:300% 300%;animation:bgshift 18s ease infinite;padding-bottom:84px}
+body{background:linear-gradient(120deg,#121212,#1a2030,#121212,#152420);background-size:300% 300%;animation:bgshift 10s ease infinite;padding-bottom:84px}
 @keyframes bgshift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 details.cfg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0}
 details.cfg>summary{font-size:18px;font-weight:bold;cursor:pointer;list-style:none;margin-bottom:6px}
 details.cfg>summary::-webkit-details-marker{display:none}
 details.cfg>summary::before{content:"▸ ";color:var(--accent)}
 details.cfg[open]>summary::before{content:"▾ ";color:var(--accent)}
+details.cfg.locked>*:not(summary){opacity:.45;pointer-events:none;filter:grayscale(.6)}
 .fabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;padding:10px 12px;background:rgba(18,18,18,.94);border-top:1px solid var(--line)}
 .fabbar button{width:100%;font-size:18px;padding:12px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -654,6 +655,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     refresh = '<meta http-equiv="refresh" content="10">' if running else ""
     disabled = " disabled" if running else ""
     cfg_open = "" if running else " open"
+    lock_cls = " locked" if running else ""
     fabbar = f"<div class='fabbar'><button type='submit' form='mainform'{disabled}>Mulai</button></div>"
     status_block = (
         f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
@@ -668,7 +670,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     outsec_style = " style='display:none'" if mode == "scan" else ""
     log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
-<details class="cfg"{cfg_open}>
+<details class="cfg{lock_cls}"{cfg_open}>
 <summary>Mulai proses</summary>
 <label>Novel</label>
 <select name="input" onchange="go('input='+encodeURIComponent(this.value))">{novel_options}</select>
