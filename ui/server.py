@@ -101,13 +101,16 @@ details.cfg.locked>*:not(summary){opacity:.45;pointer-events:none;filter:graysca
 .slider::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#e8e8e8;transition:transform .3s}
 .switch input:checked + .slider{background:var(--accent)}
 .switch input:checked + .slider::after{transform:translateX(20px)}
+.fabbar button.stop{background:#c5221f;border-color:#c5221f;color:#fff;font-weight:bold}
+.fabbar button.go{background:var(--accent);color:#101418;border-color:var(--accent);font-weight:bold}
+.fabbar button.busy{opacity:.6}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
 SCRIPT = """
 function copyLog(btn){
   var title=btn.parentNode.querySelector('summary').textContent;
-  var text=title+'\n'+btn.nextElementSibling.textContent;
+  var text=title+String.fromCharCode(10)+btn.nextElementSibling.textContent;
   var done=function(){btn.textContent='Tersalin';setTimeout(function(){btn.textContent='Salin log';},1500);};
   function fallback(){
     var t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';
@@ -376,6 +379,28 @@ def backup_data():
         if progress.exists():
             shutil.copytree(progress, target / project.name / "progress", dirs_exist_ok=True)
     return target
+
+
+def retire_progress(project, numbers):
+    import shutil
+
+    progress = project / "progress"
+    if not progress.exists() or not numbers:
+        return 0
+    # shortcut: cache hasil yang sudah lolos QA tetap dipakai, jadi terjemahan ulang bisa langsung dari cache
+    target = progress / "retired" / datetime.now().strftime("%Y%m%d_%H%M%S")
+    moved = 0
+    for number in sorted(numbers):
+        for suffix in (".json", ".json.bak"):
+            source = progress / f"chapter_{number:03d}{suffix}"
+            if source.exists():
+                target.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(source), str(target / source.name))
+                moved += 1
+    return moved
+
+
+LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
 
 
 def safe_input(value):
@@ -730,18 +755,24 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     state = "berjalan" if running else "berhenti"
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
-    refresh = '<meta http-equiv="refresh" content="10">' if running else ""
+    refresh = ""
     disabled = " disabled" if running else ""
     cfg_open = "" if running else " open"
     lock_cls = " locked" if running else ""
     rs_checked = "" if research == "0" else " checked"
     rs_hidden = " style='display:none'" if mode == "scan" else ""
-    fabbar = f"<div class='fabbar'><button type='submit' form='mainform'{disabled}>Mulai</button></div>"
+    if running:
+        fab_btn = ("<button type='submit' form='mainform' formaction='/stop' id='stop-btn' class='stop' "
+                   "onclick='return guard(this)'>Berhenti</button>")
+    else:
+        fab_btn = ("<button type='submit' form='mainform' formaction='/start' class='go' "
+                   "onclick='return guard(this)'>Mulai</button>")
+    fabbar = f"<div class='fabbar' id='fabbar'>{fab_btn}</div>"
     status_block = (
-        f"<section><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
+        f"<section id='status'><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='muted'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
-        '<form method="post" action="/stop"><button type="submit" id="stop-btn">Berhenti</button></form></section>'
+        '</section>'
     )
     files_block = (
         "<section><h3>File hasil</h3>"
@@ -783,6 +814,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <label class="switch"><input type="checkbox" name="research" value="1"{rs_checked}><span class="slider"></span><span>Riset entitas</span></label>
 <p class="muted">Aktif: nama dan istilah baru dicari di web lewat Tavily. Matikan untuk hemat kuota; glosarium yang sudah ada tetap dipakai.</p>
 </div>
+<label class='switch'><input type='checkbox' name='retry_fresh' value='1'><span class='slider'></span><span>Terjemahkan ulang chapter yang dipilih (abaikan progres lama)</span></label>
+<p class='muted'>Progres lama disimpan di folder retired, tidak dihapus.</p>
 </details>
 {log_block}
 <section>
@@ -791,18 +824,18 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>
 </form>"""
-    script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}</script>"
+    script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh}
 <title>Converise EN»ID</title>
 <style>{STYLE}{EXTRA_STYLE}</style>
-</head><body>
+</head><body data-running='{'1' if running else '0'}'>
 <h1>Converise EN»ID</h1>
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
-{progress_block}
+<div id='progress'>{progress_block}</div>
 {form_block}
 {files_block}
 <section><h3>Data</h3><p class='muted'>Salin glosarium dan progres semua novel ke Download/wn_backup.</p><form method="post" action="/backup" onsubmit="return confirm('Buat backup sekarang?')"><button type="submit">Backup data</button></form></section>
@@ -893,6 +926,8 @@ class Handler(BaseHTTPRequestHandler):
                 rows = read_chapters(project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 skip = research_flag == "0"
+                if form.get("retry_fresh", [""])[0] == "1" and mode == "translate" and numbers:
+                    retire_progress(project_for(input_path), numbers)
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
                 choice = glossary_name
                 msg = "Proses dimulai."

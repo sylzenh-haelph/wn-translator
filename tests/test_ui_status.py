@@ -266,3 +266,22 @@ def test_backup_copies_glossary_and_progress(tmp_path, monkeypatch):
     target = server.backup_data()
     assert (target / 'glossary' / 'a.txt').exists()
     assert (target / 'x_project' / 'progress' / 'chapter_002.json').exists()
+
+
+def test_script_copy_fix_has_no_raw_newline():
+    import ui.server as server
+
+    assert "String.fromCharCode(10)" in server.SCRIPT
+    assert "'\n'" not in server.SCRIPT
+
+
+def test_retire_progress_moves_selected_chapters(tmp_path):
+    from ui.server import retire_progress
+
+    progress = tmp_path / 'progress'
+    progress.mkdir()
+    for name in ['chapter_002.json', 'chapter_002.json.bak', 'chapter_003.json']:
+        (progress / name).write_text('{}', encoding='utf-8')
+    assert retire_progress(tmp_path, {2}) == 2
+    assert not (progress / 'chapter_002.json').exists()
+    assert (progress / 'chapter_003.json').exists()
