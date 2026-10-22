@@ -86,6 +86,10 @@ class GeminiClient:
                 if response.status_code in self.RETRYABLE_STATUS_CODES:
                     last_error = self._build_api_error(response)
 
+                    # shortcut: deteksi kuota harian dari teks pesan Gemini; kalau formatnya berubah, cek lagi di sini
+                    if self._is_daily_quota(last_error):
+                        raise last_error
+
                     if attempt >= self.max_retries:
                         break
 
@@ -142,6 +146,11 @@ class GeminiClient:
         )
 
         time.sleep(delay)
+
+    @staticmethod
+    def _is_daily_quota(error):
+        text = str(error).lower().replace(" ", "")
+        return "perday" in text or ("quota" in text and "daily" in text)
 
     @staticmethod
     def _get_retry_after(response):
