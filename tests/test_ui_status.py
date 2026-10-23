@@ -310,3 +310,11 @@ def test_glossary_banner_and_state_persistence_are_rendered():
     assert "gbanner" in markup
     assert "wn:state" in markup
     assert "data-empty" in markup
+
+
+def test_lexend_font_and_gradient_link_are_rendered():
+    from ui.server import page
+
+    markup = page()
+    assert "Lexend" in markup
+    assert 'class="logo-c"' in markup

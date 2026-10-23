@@ -137,6 +137,13 @@ details.sess{background:rgba(18,18,18,.45)!important}
 .k9{width:90px;height:90px;background:#a68cf5;animation-duration:32s;animation-delay:-14s}
 .k10{width:260px;height:260px;background:#8ab4f8;opacity:.07;animation-duration:40s;animation-delay:-20s}
 @keyframes drift{0%{transform:translate3d(0,0,0) rotate(0deg)}50%{transform:translate3d(22px,-30px,0) rotate(25deg)}100%{transform:translate3d(-18px,20px,0) rotate(-15deg)}}
+/* tema aqua-lime */
+:root{--accent:#5ee7ff;--grad:linear-gradient(135deg,#00e5ff 0%,#7cf7b0 50%,#c6ff3d 100%);--grad-stop:linear-gradient(135deg,#ff6b6b 0%,#c5221f 100%)}
+h1,h3{font-family:'Lexend',sans-serif;letter-spacing:.2px}
+.logo-c{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+a{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-decoration:underline;text-decoration-color:#7cf7b0;text-underline-offset:3px}
+button[type=submit],.seg .thumb,.fill,.switch input:checked + .slider{background:var(--grad)}
+.fabbar button.go{background:var(--grad);color:#0b1214;border-color:transparent}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -938,6 +945,9 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
 <title>Converise EN»ID</title>
 <style>{STYLE}{EXTRA_STYLE}</style>
 </head><body data-running='{'1' if running else '0'}'>
@@ -953,7 +963,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <span class="par" style="--f:.28;top:92%;left:74%"><i class="sh hex k9"></i></span>
 <span class="par" style="--f:.08;top:30%;left:36%"><i class="sh c k10"></i></span>
 </div>
-<h1>Converise EN»ID</h1>
+<h1><span class="logo-c">C</span>onverise EN»ID</h1>
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
 <div id='progress'>{progress_block}</div>
