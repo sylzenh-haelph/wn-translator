@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from docx import Document as DocxDocument
+from docx.oxml.ns import qn
 
 from models.document import Document, Paragraph, TextRun
 
@@ -26,6 +27,18 @@ def _run_formatting(run):
     }
 
 
+def _paragraph_pictures(source_paragraph, source):
+    pictures = []
+    for blip in source_paragraph._p.iter(qn("a:blip")):
+        rid = blip.get(qn("r:embed"))
+        if not rid or rid not in source.part.rels:
+            continue
+        part = source.part.rels[rid].target_part
+        suffix = Path(str(part.partname)).suffix.lower() or ".png"
+        pictures.append((part.blob, suffix))
+    return pictures
+
+
 def parse_docx(path):
     path = Path(path)
 
@@ -34,6 +47,8 @@ def parse_docx(path):
     document = Document()
 
     document.title = path.stem
+
+    images = {}
 
     paragraph_number = 0
 
@@ -66,6 +81,14 @@ def parse_docx(path):
             ),
         }
 
+        image_names = []
+        for blob, suffix in _paragraph_pictures(source_paragraph, source):
+            name = f"{paragraph_id}_{len(image_names)}{suffix}"
+            images[name] = blob
+            image_names.append(name)
+        if image_names:
+            style["images"] = image_names
+
         document.paragraphs.append(
             Paragraph(
                 id=paragraph_id,
@@ -73,5 +96,7 @@ def parse_docx(path):
                 style=style,
             )
         )
+
+    document.metadata["docx_images"] = images
 
     return document

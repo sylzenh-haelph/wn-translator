@@ -40,7 +40,27 @@ def _format_run(run):
     return text
 
 
+def _image_media_type(name):
+    suffix = Path(name).suffix.lower()
+    return {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".webp": "image/webp",
+    }.get(suffix, "application/octet-stream")
+
+
 def _paragraph_html(paragraph):
+    images = (paragraph.style or {}).get("images") or []
+    if images:
+        return "".join(
+            f'<p class="img"><img src="images/{name}" alt="" '
+            'style="display:block;margin:0 auto;max-width:100%;height:auto"/></p>'
+            for name in images
+        )
+
     if not paragraph.runs:
         return "<p></p>"
 
@@ -776,6 +796,16 @@ def reconstruct_epub(
             document
         )
 
+    docx_images = document.metadata.get("docx_images", {}) or {}
+    if docx_images:
+        for paragraph in document.paragraphs:
+            names = sorted(
+                name for name in docx_images
+                if name.startswith(f"{paragraph.id}_")
+            )
+            if names:
+                paragraph.style = {**(paragraph.style or {}), "images": names}
+
     grouped = _group_paragraphs_by_spine(
         document,
         structure,
@@ -930,6 +960,17 @@ def reconstruct_epub(
             _build_navigation_titles(document, structure)
         )
         generated_paths.add(nav_path)
+
+    for name, blob in (document.metadata.get("docx_images", {}) or {}).items():
+        href = f"images/{name}"
+        structure["manifest"][f"img-{name.replace('.', '-')}"] = {
+            "href": href,
+            "media_type": _image_media_type(name),
+            "properties": "",
+        }
+        image_path = _resolve_resource_path(opf_path, href)
+        generated_resources[image_path] = blob
+        generated_paths.add(image_path)
 
     match = re.search(r"_v(\d+)$", output_path.stem)
     content_opf = _build_content_opf(
