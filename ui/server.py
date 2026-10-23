@@ -147,7 +147,7 @@ button[type=submit],.seg .thumb,.fill,.switch input:checked + .slider{background
 details>summary{font-family:'Lexend',sans-serif}
 h1{font-size:2rem;line-height:1.15}
 .dotted-i{position:relative;display:inline-block;background:none!important;-webkit-background-clip:border-box;background-clip:border-box;color:inherit}
-.dotted-i .dots{position:absolute;left:50%;top:var(--dot-y,-.26em);transform:translateX(-50%);display:flex;gap:.07em;pointer-events:none}
+.dotted-i .dots{position:absolute;left:50%;top:var(--dot-y,.06em);transform:translateX(-50%);display:flex;gap:.07em;pointer-events:none}
 .dotted-i .d{width:.2em;height:.2em;border-radius:50%}
 .dotted-i .d1{background:#10a37f;box-shadow:0 0 6px rgba(16,163,127,.6)}
 .dotted-i .d2{background:#d97757;box-shadow:0 0 6px rgba(217,119,87,.6)}
