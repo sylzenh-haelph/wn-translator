@@ -144,6 +144,12 @@ h1,h3{font-family:'Lexend',sans-serif;letter-spacing:.2px}
 a{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-decoration:underline;text-decoration-color:#7cf7b0;text-underline-offset:3px}
 button[type=submit],.seg .thumb,.fill,.switch input:checked + .slider{background:var(--grad)}
 .fabbar button.go{background:var(--grad);color:#0b1214;border-color:transparent}
+details>summary{font-family:'Lexend',sans-serif}
+h1{font-size:2rem;line-height:1.15}
+.dotted-i{position:relative;display:inline-block;background:none!important;-webkit-background-clip:border-box;background-clip:border-box;color:inherit}
+.dotted-i .d1,.dotted-i .d2{position:absolute;width:.17em;height:.17em;border-radius:50%;top:.1em}
+.dotted-i .d1{left:.02em;background:#10a37f;box-shadow:0 0 6px rgba(16,163,127,.6)}
+.dotted-i .d2{left:.2em;background:#d97757;box-shadow:0 0 6px rgba(217,119,87,.6)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -963,7 +969,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <span class="par" style="--f:.28;top:92%;left:74%"><i class="sh hex k9"></i></span>
 <span class="par" style="--f:.08;top:30%;left:36%"><i class="sh c k10"></i></span>
 </div>
-<h1><span class="logo-c">C</span>onverise EN»ID</h1>
+<h1><span class="logo-c">C</span>onver<span class="dotted-i" aria-label="ï">ı<span class="d1"></span><span class="d2"></span></span>se EN»ID</h1>
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
 <div id='progress'>{progress_block}</div>

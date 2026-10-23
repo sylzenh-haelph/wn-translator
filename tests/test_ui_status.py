@@ -318,3 +318,13 @@ def test_lexend_font_and_gradient_link_are_rendered():
     markup = page()
     assert "Lexend" in markup
     assert 'class="logo-c"' in markup
+
+
+def test_title_has_two_colored_dots_and_lexend_summaries():
+    from ui.server import page
+
+    markup = page()
+    assert 'class="dotted-i"' in markup
+    assert "#10a37f" in markup
+    assert "#d97757" in markup
+    assert "details>summary" in markup
