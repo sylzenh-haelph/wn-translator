@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from translation.chapter_context import ContextState
+from translation.chunker import Chunk
 
 
 @dataclass
@@ -78,7 +79,7 @@ class ChapterProcessor:
                 # shortcut: chunk kosong (pemisah adegan atau gambar) tidak dikirim ke model
                 processed = self._blank_chunk(chunk, current_state)
             else:
-                processed = self._process_chunk(
+                processed = self._process_chunk_safe(
                     chunk=chunk,
                     chapter_context=chapter_context,
                     context_state=current_state,
@@ -123,6 +124,65 @@ class ChapterProcessor:
             )
 
         return results
+
+    def _process_chunk_safe(
+        self,
+        chunk,
+        chapter_context,
+        context_state,
+        entity_resolutions,
+        depth=0,
+    ):
+        try:
+            return self._process_chunk(
+                chunk=chunk,
+                chapter_context=chapter_context,
+                context_state=context_state,
+                entity_resolutions=entity_resolutions,
+            )
+        except ValueError:
+            # shortcut: model kadang menggabung atau melewatkan paragraf di chunk besar; chunk dibelah dua lalu diulang
+            count = len(chunk.paragraph_ids)
+            if count < 2 or depth >= 3:
+                raise
+            middle = count // 2
+            halves = [
+                Chunk(
+                    chunk_id=f"{chunk.chunk_id}-{index}",
+                    paragraph_ids=list(chunk.paragraph_ids[start:end]),
+                    text="\n".join(chunk.paragraph_texts[start:end]),
+                    paragraph_texts=list(chunk.paragraph_texts[start:end]),
+                    estimated_tokens=0,
+                )
+                for index, (start, end) in enumerate([(0, middle), (middle, count)])
+            ]
+            parts = []
+            state = context_state
+            for half in halves:
+                part = self._process_chunk_safe(
+                    half,
+                    chapter_context,
+                    state,
+                    entity_resolutions,
+                    depth + 1,
+                )
+                state = part.context_state
+                parts.append(part)
+            return ProcessedChunk(
+                chunk_id=chunk.chunk_id,
+                translation="\n".join(part.translation for part in parts),
+                paragraph_translations=[
+                    value
+                    for part in parts
+                    for value in part.paragraph_translations
+                ],
+                context_state=parts[-1].context_state,
+                attempts=sum(part.attempts for part in parts),
+                qa_passed=all(part.qa_passed for part in parts),
+                flagged=any(part.flagged for part in parts),
+                issues=[issue for part in parts for issue in part.issues],
+                cache_hit=False,
+            )
 
     @staticmethod
     def _blank_chunk(chunk, context_state):
