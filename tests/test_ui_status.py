@@ -337,3 +337,9 @@ def test_preview_chapters_reads_cached_list(tmp_path):
         '[{"id": "chapter_002", "title": "Bab 1"}]', encoding='utf-8')
     rows = preview_chapters(Path('input/x.epub'), tmp_path)
     assert rows == [{"id": "chapter_002", "title": "Bab 1", "status": "not_started", "done": 0, "total": 0}]
+
+
+def test_running_fill_uses_aqua_lime_gradient():
+    from ui.server import EXTRA_STYLE
+
+    assert "var(--grad)" in EXTRA_STYLE

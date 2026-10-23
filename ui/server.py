@@ -61,8 +61,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #f-docx:checked ~ .thumb{transform:translateX(100%)}
 .bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
 .fill{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
-.running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.22) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.22) 75%,transparent 75%,transparent);background-size:24px 24px;animation:stripes 1s linear infinite}
-@keyframes stripes{from{background-position:0 0}to{background-position:24px 0}}
+.running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.28) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.28) 75%,transparent 75%,transparent),var(--grad);background-size:24px 24px,100% 100%;background-position:0 0,0 0;animation:stripes 1s linear infinite}
+@keyframes stripes{from{background-position:0 0,0 0}to{background-position:24px 0,0 0}}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:8px;vertical-align:middle;animation:spin .8s linear infinite}
