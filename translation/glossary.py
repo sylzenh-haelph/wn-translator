@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 
@@ -44,6 +45,17 @@ def apply_glossary(text, pairs):
         re.IGNORECASE,
     )
     return pattern.sub(lambda m: table[m.group(1).lower()], text)
+
+
+def entry_name(text):
+    # Baris aktif maupun nonaktif (diawali '#') dihitung sebagai entri; catatan komentar tidak.
+    body = text.lstrip("#").strip() if text.startswith("#") else text
+    if "=" not in body:
+        return None
+    left = body.split("=", 1)[0].strip()
+    if not left or "." in left or ":" in left:
+        return None
+    return left
 
 
 def _words(name):
@@ -100,8 +112,38 @@ def translate_terms(client, names):
     }
 
 
+def meta_path(path):
+    path = Path(path)
+    return path.parent / ".meta" / f"{path.name}.json"
+
+
+def read_meta(path):
+    file = meta_path(path)
+    if not file.exists():
+        return {}
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_meta(path, added):
+    meta = read_meta(path)
+    seen = meta.get("seen") if isinstance(meta.get("seen"), dict) else {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    for name in added:
+        seen[name] = now
+    file = meta_path(path)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(
+        json.dumps({"new": list(added), "seen": seen}, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+
+
 def merge_scan_glossary(entries, path, title, translations=None):
-    # Tambah entri baru saja. Yang sudah ada (termasuk isian Indonesia dan komentar) tidak diubah.
+    # Tambah entri baru saja. Entri yang sudah ada (aktif maupun nonaktif) tidak diubah dan tidak diduplikat.
     translations = translations or {}
     path = Path(path)
     if path.exists():
@@ -113,11 +155,7 @@ def merge_scan_glossary(entries, path, title, translations=None):
             "",
         ]
 
-    existing = []
-    for line in lines:
-        text = line.strip()
-        if text and not text.startswith("#") and "=" in text:
-            existing.append(text.split("=", 1)[0].strip())
+    existing = [name for name in (entry_name(line.strip()) for line in lines) if name]
     known = {name.lower() for name in existing}
 
     fresh = [(name, kind) for name, kind in entries if name.strip().lower() not in known]
@@ -153,4 +191,7 @@ def merge_scan_glossary(entries, path, title, translations=None):
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return sum(len(v) for v in by_kind.values())
+
+    added = [name for names in by_kind.values() for name in names]
+    write_meta(path, added)
+    return len(added)

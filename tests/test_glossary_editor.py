@@ -49,3 +49,19 @@ def test_editor_has_save_button_at_top_and_bottom(tmp_path, monkeypatch):
     assert page.count("form='gform'") == 1
     assert page.count("type='submit'") >= 2
     assert "Eris Keren" in page
+
+
+
+def test_editor_shows_new_badge_and_controls(tmp_path, monkeypatch):
+    import ui.glossary_page as gp
+    from translation.glossary import write_meta
+
+    monkeypatch.setattr(gp, "ROOT", tmp_path)
+    (tmp_path / "glossary").mkdir()
+    file = tmp_path / "glossary" / "x.txt"
+    file.write_text("Eris = Eris Keren\nDragon God = Dewa Naga\n", encoding="utf-8")
+    write_meta(file, ["Dragon God"])
+    page = gp.glossary_page("glossary/x.txt")
+    assert "badge-new" in page
+    assert "id='onlyNew'" in page
+    assert "id='sort'" in page

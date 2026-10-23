@@ -1,15 +1,17 @@
-"""Editor glosarium lewat UI: isian terbaca penuh, bisa dicari, dan disimpan dari atas maupun bawah."""
+"""Editor glosarium lewat UI: isian terbaca penuh, bisa dicari, diurutkan, dan menandai entri baru hasil scan."""
 
 import html
 from pathlib import Path
 from shutil import copy2
 from urllib.parse import quote as url_quote
 
+from translation.glossary import read_meta
+
 ROOT = Path(__file__).resolve().parent.parent
 BACKUP_DIR = ROOT / "glossary" / ".bak"
 
 STYLE = """
-:root{color-scheme:dark;--bg:#121212;--panel:#1e1e1e;--fg:#e8e8e8;--muted:#9aa0a6;--line:#333;--accent:#8ab4f8;--ok:#81c995;--warn:#f6b26b}
+:root{color-scheme:dark;--bg:#121212;--panel:#1e1e1e;--fg:#e8e8e8;--muted:#9aa0a6;--line:#333;--accent:#5ee7ff;--ok:#7cf7b0;--warn:#f6b26b;--grad:linear-gradient(135deg,#00e5ff 0%,#7cf7b0 50%,#c6ff3d 100%)}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:sans-serif;font-size:17px;margin:0 12px 24px;line-height:1.4}
 h1{font-size:22px;margin:12px 0 6px}
@@ -20,18 +22,22 @@ a{color:var(--accent)}
 label{display:block;color:var(--muted);font-size:15px;margin-top:8px}
 input:not([type=checkbox]):not([type=radio]){width:100%;font-size:16px;margin:4px 0;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px}
 input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px;vertical-align:middle}
+select{font-size:15px;padding:7px 10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px}
 button{font-size:16px;padding:9px 16px;margin:0;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px}
-button[type=submit]{background:var(--accent);color:#101418;border-color:var(--accent);font-weight:bold}
+button[type=submit]{background:var(--grad);color:#0b1214;border-color:transparent;font-weight:bold}
 .topbar{position:sticky;top:0;z-index:9;background:var(--bg);padding:8px 12px 6px;margin:0 -12px;border-bottom:1px solid var(--line)}
 .row{display:flex;gap:8px;align-items:center;justify-content:space-between}
 .stats{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px;color:var(--muted);margin:6px 0}
-.stats label{display:inline-flex;align-items:center;gap:6px;margin:0;color:var(--fg)}
+.ctrl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:4px 0}
+.ctrl label{display:inline-flex;align-items:center;gap:6px;margin:0;color:var(--fg)}
 .sec h3{color:var(--accent);margin:18px 0 0}
 .ent{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
 .ent.kosong{border-left:4px solid var(--warn)}
+.ent.baru{border-color:#7cf7b0;box-shadow:0 0 10px rgba(124,247,176,.18)}
 .ent.off .asal{color:var(--muted);text-decoration:line-through}
 .ent .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .ent .asal{font-weight:bold;word-break:break-word}
+.badge-new{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--grad);color:#0b1214;font-weight:bold;margin-left:8px;vertical-align:middle}
 .ent .chk{display:flex;align-items:center;gap:6px;margin:0;color:var(--muted);font-size:14px;white-space:nowrap}
 .ent textarea{display:block;width:100%;margin-top:6px;font-size:17px;line-height:1.4;padding:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;resize:none;overflow:hidden;min-height:44px}
 .ent textarea:focus{outline:2px solid var(--accent)}
@@ -45,10 +51,25 @@ function noEnter(e){if(e.key==='Enter'){e.preventDefault();}}
 function applyFilter(){
   var q=document.getElementById('q').value.trim().toLowerCase();
   var only=document.getElementById('onlyEmpty').checked;
+  var onlyNew=document.getElementById('onlyNew').checked;
+  var mode=document.getElementById('sort').value;
   document.querySelectorAll('.sec').forEach(function(sec){
+    var cards=Array.prototype.slice.call(sec.querySelectorAll('.ent'));
+    cards.sort(function(a,b){
+      var oa=parseInt(a.getAttribute('data-order'),10), ob=parseInt(b.getAttribute('data-order'),10);
+      if(mode==='alpha'){return a.getAttribute('data-name').localeCompare(b.getAttribute('data-name'))||(oa-ob);}
+      if(mode==='latest'){
+        var d=b.getAttribute('data-seen').localeCompare(a.getAttribute('data-seen'));
+        return d!==0?d:(oa-ob);
+      }
+      return oa-ob;
+    });
     var visible=0;
-    sec.querySelectorAll('.ent').forEach(function(card){
-      var ok=(!q||card.getAttribute('data-search').indexOf(q)>=0)&&(!only||card.getAttribute('data-empty')==='1');
+    cards.forEach(function(card){
+      sec.appendChild(card);
+      var ok=(!q||card.getAttribute('data-search').indexOf(q)>=0)
+        &&(!only||card.getAttribute('data-empty')==='1')
+        &&(!onlyNew||card.getAttribute('data-new')==='1');
       card.style.display=ok?'':'none';
       if(ok){visible++;}
     });
@@ -123,21 +144,29 @@ def save_glossary(form):
     return f"/glossary?file={url_quote(value)}&msg={url_quote('Tersimpan.')}"
 
 
-def _card(entry):
+def _card(entry, new_names, seen):
     i = entry["line"]
-    search = html.escape(f"{entry['left']} {entry['right']}".lower())
+    left, right = entry["left"], entry["right"]
+    is_new = left in new_names
+    search = html.escape(f"{left} {right}".lower())
     classes = ["ent"]
-    if not entry["right"]:
+    if not right:
         classes.append("kosong")
     if not entry["active"]:
         classes.append("off")
+    if is_new:
+        classes.append("baru")
     checked = " checked" if entry["active"] else ""
-    empty = "1" if not entry["right"] else "0"
+    empty = "1" if not right else "0"
+    new_flag = "1" if is_new else "0"
+    badge = "<span class='badge-new'>baru</span>" if is_new else ""
     return (
-        f"<div class='{' '.join(classes)}' data-search='{search}' data-empty='{empty}'>"
-        f"<div class='head'><span class='asal'>{html.escape(entry['left'])}</span>"
+        f"<div class='{' '.join(classes)}' data-search='{search}' data-empty='{empty}' "
+        f"data-new='{new_flag}' data-seen='{html.escape(seen.get(left, ''))}' "
+        f"data-name='{html.escape(left.lower())}' data-order='{i}'>"
+        f"<div class='head'><span class='asal'>{html.escape(left)}{badge}</span>"
         f"<label class='chk'><input type='checkbox' name='a{i}'{checked}> aktif</label></div>"
-        f"<textarea name='r{i}' rows='1' onkeydown='noEnter(event)'>{html.escape(entry['right'])}</textarea>"
+        f"<textarea name='r{i}' rows='1' onkeydown='noEnter(event)'>{html.escape(right)}</textarea>"
         "</div>"
     )
 
@@ -164,8 +193,12 @@ def glossary_page(value, message=""):
         return _page("Glosarium", str(exc), "<section><a href='/'>← Kembali</a></section>")
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     entries = parse_entries(text)
+    meta = read_meta(path)
+    new_names = set(meta.get("new", [])) if isinstance(meta.get("new"), list) else set()
+    seen = meta.get("seen", {}) if isinstance(meta.get("seen"), dict) else {}
     empty = sum(1 for e in entries if not e["right"])
     off = sum(1 for e in entries if not e["active"])
+    fresh = sum(1 for e in entries if e["left"] in new_names)
 
     sections = []
     for entry in entries:
@@ -174,7 +207,7 @@ def glossary_page(value, message=""):
         sections[-1][1].append(entry)
     cards = "".join(
         f"<div class='sec'><h3>{html.escape(name or 'tanpa bagian')}</h3>"
-        + "".join(_card(e) for e in items)
+        + "".join(_card(e, new_names, seen) for e in items)
         + "</div>"
         for name, items in sections
     )
@@ -186,9 +219,19 @@ def glossary_page(value, message=""):
         "</div>"
         "<input type='search' id='q' placeholder='Cari asal atau arti' oninput='applyFilter()'>"
         "<div class='stats'>"
-        f"<span>{len(entries)} entri</span><span>{empty} kosong</span><span>{off} nonaktif</span>"
+        f"<span>{len(entries)} entri</span><span>{empty} kosong</span>"
+        f"<span>{off} nonaktif</span><span>{fresh} baru</span>"
+        "</div>"
+        "<div class='ctrl'>"
         "<label><input type='checkbox' id='onlyEmpty' onchange='applyFilter()'> hanya kosong</label>"
-        "</div></div>"
+        "<label><input type='checkbox' id='onlyNew' onchange='applyFilter()'> hanya baru</label>"
+        "<select id='sort' onchange='applyFilter()'>"
+        "<option value='default'>Urutan default</option>"
+        "<option value='latest'>Terbaru dulu</option>"
+        "<option value='alpha'>Abjad</option>"
+        "</select>"
+        "</div>"
+        "</div>"
     )
     body = (
         "<form id='gform' method='post' action='/glossary/save'>"

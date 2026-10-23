@@ -103,3 +103,23 @@ def test_translate_terms_uses_model_json():
 
 def test_translate_terms_failure_returns_empty():
     assert translate_terms(BrokenClient(), ["Dragon God"]) == {}
+
+
+
+def test_disabled_entry_is_not_duplicated_by_next_scan(tmp_path):
+    out = tmp_path / "g.txt"
+    out.write_text("# Galewind Horse = Kuda Angin Badai\n", encoding="utf-8")
+    added = merge_scan_glossary([("Galewind Horse", "character")], out, "Novel")
+    assert added == 0
+    assert out.read_text(encoding="utf-8").count("Galewind Horse") == 1
+
+
+def test_scan_marks_new_entries_until_next_scan(tmp_path):
+    from translation.glossary import read_meta
+
+    out = tmp_path / "g.txt"
+    merge_scan_glossary([("Dragon God", "title")], out, "Novel")
+    assert read_meta(out)["new"] == ["Dragon God"]
+    merge_scan_glossary([], out, "Novel")
+    assert read_meta(out)["new"] == []
+    assert "Dragon God" in read_meta(out)["seen"]
