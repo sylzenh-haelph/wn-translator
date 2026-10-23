@@ -121,11 +121,11 @@ Return ONLY valid JSON with this structure:
         if len(refined_paragraphs) != len(
             paragraph_translations
         ):
-            raise ValueError(
-                "Jumlah paragraph_translations hasil "
-                "refinement tidak sesuai: "
-                f"{len(refined_paragraphs)} != "
-                f"{len(paragraph_translations)}"
+            # shortcut: refinement yang jumlah paragrafnya salah dibuang; chunk tidak digagalkan
+            return RefinementResult(
+                translation=translation,
+                paragraph_translations=list(paragraph_translations),
+                context_state=context_state or ContextState(),
             )
 
         context_data = data.get(

@@ -78,7 +78,7 @@ def test_refinement_engine_passes_previous_translation_and_qa_issues():
     assert "Alice" in prompt
 
 
-def test_refinement_engine_rejects_wrong_paragraph_count():
+def test_refinement_engine_keeps_previous_translation_on_wrong_count():
     class BadClient:
         def generate(self, prompt):
             return """{
@@ -89,20 +89,13 @@ def test_refinement_engine_rejects_wrong_paragraph_count():
 
     engine = RefinementEngine(BadClient())
 
-    try:
-        engine.refine(
-            text="Alice enters.",
-            translation="Alice masuk.",
-            paragraph_translations=[
-                "Alice masuk."
-            ],
-        )
-    except ValueError as exc:
-        assert (
-            "paragraph_translations" in str(exc)
-        )
-    else:
-        raise AssertionError(
-            "RefinementEngine seharusnya menolak "
-            "jumlah paragraph yang tidak sesuai."
-        )
+    result = engine.refine(
+        text="Alice enters.",
+        translation="Alice masuk.",
+        paragraph_translations=[
+            "Alice masuk."
+        ],
+    )
+
+    assert result.translation == "Alice masuk."
+    assert result.paragraph_translations == ["Alice masuk."]

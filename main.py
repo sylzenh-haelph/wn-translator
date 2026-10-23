@@ -1736,7 +1736,7 @@ def main():
             print(f"Chapter selection: {listed}")
             logger.info(f"Chapter selection: {listed}")
 
-        for retry_round in range(1, 4):
+        for retry_round in range(1, 3):
             try:
                 translated_chapters, translation_stats = process_chapters(
                     document,
@@ -1754,18 +1754,18 @@ def main():
                     export_only=args.export_only,
                 )
             except Exception as exc:
-                if retry_round == 3:
+                if retry_round == 2:
                     raise
                 print(f"\nERROR: {exc}. Diulang setelah 60 detik.")
                 time.sleep(60)
                 continue
 
             failed = translation_stats.failed_chapters
-            if not failed or retry_round == 3:
+            if not failed or retry_round == 2:
                 break
             print(
                 f"\nChapter gagal: {', '.join(failed)}. "
-                f"Diulang setelah 60 detik (putaran {retry_round + 1}/3)."
+                f"Diulang setelah 60 detik (putaran {retry_round + 1}/2)."
             )
             time.sleep(60)
 

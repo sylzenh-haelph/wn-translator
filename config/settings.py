@@ -24,7 +24,7 @@ class AppConfig:
     orchestration_provider: str = "gemini"
     orchestration_model: str = "gemini-3.1-flash-lite"
     translation_fallbacks: str = "gemini:gemini-3.1-flash-lite"
-    max_retries: int = 3
+    max_retries: int = 2
     timeout: int = 120
     backoff_base: float = 2.0
 
@@ -40,12 +40,12 @@ class AppConfig:
     # Research
     research_enabled: bool = True
     research_timeout: int = 20
-    research_max_retries: int = 3
+    research_max_retries: int = 2
     research_max_attempts: int = 4
 
     # QA
     qa_enabled: bool = True
-    qa_max_retries: int = 2
+    qa_max_retries: int = 1
 
     def get_api_key(self, provider: str) -> str:
         if provider == "gemini":

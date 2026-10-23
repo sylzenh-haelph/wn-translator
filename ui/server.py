@@ -142,7 +142,8 @@ function setFormat(v){
     if(!cb){return;}
     var have=(tr.getAttribute('data-have')||'').split(',');
     var done=tr.getAttribute('data-done')==='1';
-    cb.checked=(!done)||(have.indexOf(v)<0);
+    var st=tr.getAttribute('data-status');
+    cb.checked=(st==='not_started')||(done&&have.indexOf(v)<0);
   });
 }
 function pickGlossary(v){
@@ -568,6 +569,16 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     log_marker(f"MULAI {mode} · {input_path.name} · {fmt.upper()}")
+    _new_project = project_for(input_path)
+    if not (_new_project / "chapters.json").exists() and not (_new_project / "config.json").exists():
+        # shortcut: novel baru memakai chunk lebih besar; novel yang sudah berjalan tidak diubah karena progresnya bergantung pada batas chunk lama
+        _new_project.mkdir(parents=True, exist_ok=True)
+        (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
+    _new_project = project_for(input_path)
+    if not (_new_project / "chapters.json").exists() and not (_new_project / "config.json").exists():
+        # shortcut: novel baru memakai chunk lebih besar; novel yang sudah berjalan tidak diubah
+        _new_project.mkdir(parents=True, exist_ok=True)
+        (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
     JOB_MODE.write_text(mode, encoding="utf-8")
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
@@ -689,7 +700,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         have = chapter_files(stem, number, exports)
         have_attr = ",".join(have)
         done = r["status"] == "completed"
-        checked = " checked" if not done or fmt not in have else ""
+        checked = " checked" if (r["status"] == "not_started" or (done and fmt not in have)) else ""
         if not done:
             file_cell = ""
         elif have:
@@ -704,7 +715,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
             label = STATUS_TEXT.get(r["status"], r["status"])
         done_attr = "1" if done else "0"
         table += (
-            f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}">'
+            f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}" data-status="{r["status"]}">'
             f'<td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
             f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
             f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
