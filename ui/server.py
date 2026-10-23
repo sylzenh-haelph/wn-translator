@@ -861,7 +861,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
             f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
-    listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports if "_chapters/" not in key)
+    listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in sorted(exports, key=lambda k: exports[k].stat().st_mtime, reverse=True) if "_chapters/" not in key)
 
     mode_inputs = "".join(
         f'<input type="radio" id="m-{key}" name="mode" value="{key}"'
