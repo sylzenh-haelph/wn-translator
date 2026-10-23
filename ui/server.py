@@ -61,8 +61,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #f-docx:checked ~ .thumb{transform:translateX(100%)}
 .bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
 .fill{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
-.running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.28) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.28) 75%,transparent 75%,transparent),var(--grad);background-size:24px 24px,100% 100%;background-position:0 0,0 0;animation:stripes 1s linear infinite}
-@keyframes stripes{from{background-position:0 0,0 0}to{background-position:24px 0,0 0}}
+.running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.55) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.55) 75%,transparent 75%,transparent),var(--grad);background-size:28px 28px,100% 100%;background-position:0 0,0 0;animation:stripes .9s linear infinite;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+@keyframes stripes{from{background-position:0 0,0 0}to{background-position:28px 0,0 0}}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:8px;vertical-align:middle;animation:spin .8s linear infinite}
@@ -833,10 +833,13 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
     exports = files()
 
+    cache_file = project_for(current) / "chunk_totals.json" if current else None
+    totals = chunk_totals_safe(current, project_for(current)) if (current and (running or cache_file.exists())) else None
     table = ""
     for r in rows:
         number = int(r["id"].split("_")[1])
         rid = html.escape(r["id"])
+        row_total = totals.get(r["id"], r["total"]) if totals else r["total"]
         have = chapter_files(stem, number, exports)
         have_attr = ",".join(have)
         done = r["status"] == "completed"
@@ -858,7 +861,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
             f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}" data-status="{r["status"]}">'
             f'<td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
             f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
-            f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
+            f"<td>{r['done']}/{row_total}</td><td>{file_cell}</td></tr>"
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
     listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in sorted(exports, key=lambda k: exports[k].stat().st_mtime, reverse=True) if "_chapters/" not in key)
@@ -876,7 +879,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         for f in FORMATS
     )
 
-    totals = chunk_totals_safe(current, project_for(current)) if (running and current) else None
     summary = progress_summary(rows, totals)
     spinner = "<span class='spin'></span>" if running else ""
     scan_state = scan_progress(project_for(current)) if (running and job_mode == "scan" and current) else None

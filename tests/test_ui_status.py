@@ -343,3 +343,9 @@ def test_running_fill_uses_aqua_lime_gradient():
     from ui.server import EXTRA_STYLE
 
     assert "var(--grad)" in EXTRA_STYLE
+
+
+def test_chapter_chunk_total_uses_full_novel_totals():
+    from ui.server import EXTRA_STYLE
+
+    assert "28px 28px" in EXTRA_STYLE
