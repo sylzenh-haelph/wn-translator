@@ -261,7 +261,7 @@ class DocumentChapterSplitter:
                                 f"chapter_"
                                 f"{chapter_number:03d}"
                             ),
-                            title=current_title,
+                            title=current_title or document.title,
                             paragraphs=current_paragraphs,
                             heading=current_heading,
                         )
@@ -283,7 +283,7 @@ class DocumentChapterSplitter:
                         f"chapter_"
                         f"{chapter_number:03d}"
                     ),
-                    title=current_title,
+                    title=current_title or document.title,
                     paragraphs=current_paragraphs,
                     heading=current_heading,
                 )
