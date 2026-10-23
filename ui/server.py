@@ -538,6 +538,12 @@ def job_running():
 def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", skip_research=False):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
+    if input_path.suffix.lower() == ".epub":
+        repaired = quote(f"temp/repaired/{input_path.stem}.epub")
+        prepare = f"mkdir -p temp/repaired && python -m parsers.epub_repair {source} {repaired} && "
+        source = repaired
+    else:
+        prepare = ""
     glossary = quote(f"glossary/{glossary_name}")
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
@@ -554,7 +560,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
-        f"{env}python -u main.py {source} {args} "
+        f"{prepare}{env}python -u main.py {source} {args} "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
         f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
         "termux-wake-unlock 2>/dev/null"

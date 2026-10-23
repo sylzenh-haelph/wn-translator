@@ -27,4 +27,4 @@ def test_retry_defaults_reduced_by_one():
     cfg = AppConfig()
     assert cfg.max_retries == 2
     assert cfg.research_max_retries == 2
-    assert cfg.qa_max_retries == 1
+    assert cfg.qa_max_retries == 2

@@ -45,7 +45,7 @@ class AppConfig:
 
     # QA
     qa_enabled: bool = True
-    qa_max_retries: int = 1
+    qa_max_retries: int = 2
 
     def get_api_key(self, provider: str) -> str:
         if provider == "gemini":
