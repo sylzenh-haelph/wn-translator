@@ -421,6 +421,34 @@ def chunk_hint(rows, running, project):
     )
 
 
+def preview_chapters(input_path, project):
+    path = project / "chapter_preview.json"
+    if path.exists():
+        items = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        from main import DocumentChapterSplitter, parse_document
+
+        document = parse_document(input_path)
+        items = [
+            {"id": chapter.chapter_id, "title": chapter.title}
+            for chapter in DocumentChapterSplitter().split(document)
+            if chapter.paragraphs
+        ]
+        project.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    return [
+        {"id": item["id"], "title": item["title"], "status": "not_started", "done": 0, "total": 0}
+        for item in items
+    ]
+
+
+def preview_chapters_safe(input_path, project):
+    try:
+        return preview_chapters(input_path, project)
+    except Exception:
+        return []
+
+
 def chunk_totals(input_path, project):
     path = project / "chunk_totals.json"
     if path.exists():
@@ -800,7 +828,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     rename_style = "display:none" if is_new else ""
     stem = current.stem if current else ""
     input_param = url_quote(f"input/{current.name}") if current else ""
-    rows = read_chapters(project_for(current)) if current else []
+    rows = (read_chapters(project_for(current)) or preview_chapters_safe(current, project_for(current))) if current else []
     running = job_running()
     job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
     exports = files()
@@ -1063,7 +1091,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/start":
                 input_path = safe_input(selected)
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
-                rows = read_chapters(project_for(input_path))
+                rows = read_chapters(project_for(input_path)) or preview_chapters_safe(input_path, project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 skip = research_flag == "0"
                 if form.get("retry_fresh", [""])[0] == "1" and mode == "translate" and numbers:

@@ -328,3 +328,12 @@ def test_title_has_two_colored_dots_and_lexend_summaries():
     assert "#10a37f" in markup
     assert "#d97757" in markup
     assert "details>summary" in markup
+
+
+def test_preview_chapters_reads_cached_list(tmp_path):
+    from ui.server import preview_chapters
+
+    (tmp_path / 'chapter_preview.json').write_text(
+        '[{"id": "chapter_002", "title": "Bab 1"}]', encoding='utf-8')
+    rows = preview_chapters(Path('input/x.epub'), tmp_path)
+    assert rows == [{"id": "chapter_002", "title": "Bab 1", "status": "not_started", "done": 0, "total": 0}]
