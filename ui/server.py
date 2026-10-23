@@ -167,6 +167,23 @@ function trackScroll(){
   update();
 }
 trackScroll();
+(function restoreState(){
+  var saved=null;
+  try{saved=JSON.parse(localStorage.getItem('wn:state')||'null');}catch(e){saved=null;}
+  var params=new URLSearchParams(location.search);
+  if(saved&&saved.input){
+    var input=params.get('input')||saved.input;
+    var wantG=params.get('g')||((input===saved.input)?saved.g:'');
+    var wantF=params.get('f')||saved.f||'epub';
+    var wantM=params.get('m')||saved.m||'translate';
+    var same=params.get('input')===input&&params.get('g')===wantG&&params.get('f')===wantF&&params.get('m')===wantM;
+    if(!same&&wantG){
+      location.replace('/?input='+encodeURIComponent(input)+'&g='+encodeURIComponent(wantG)+'&f='+encodeURIComponent(wantF)+'&m='+encodeURIComponent(wantM));
+      return;
+    }
+  }
+  saveState();
+})();
 function toStop(){
   var b=document.getElementById('stop-btn');
   if(!b){return;}
@@ -175,6 +192,7 @@ function toStop(){
   setTimeout(function(){b.classList.remove('flash');},1500);
 }
 function setMode(v){
+  saveState();
   var out=document.getElementById('outsec');
   if(out){out.style.display=(v==='scan')?'none':'';}
   var rs=document.getElementById('rsec');
@@ -183,6 +201,7 @@ function setMode(v){
   if(h){h.textContent=HINTS[v]||'';}
 }
 function setFormat(v){
+  saveState();
   document.querySelectorAll('tr[data-id]').forEach(function(tr){
     var cb=tr.querySelector('input[name=ch]');
     if(!cb){return;}
@@ -192,7 +211,24 @@ function setFormat(v){
     cb.checked=(st==='not_started')||(done&&have.indexOf(v)<0);
   });
 }
+function syncGlossaryUI(){
+  var sel=document.getElementById('gsel');
+  var b=document.getElementById('gbanner');
+  if(!sel||!b){return;}
+  var opt=sel.options[sel.selectedIndex];
+  b.style.display=(opt&&opt.getAttribute('data-empty')==='1')?'':'none';
+}
+function saveState(){
+  var inp=document.querySelector('select[name=input]');
+  if(!inp){return;}
+  var g=document.getElementById('gsel');
+  var f=document.querySelector('input[name=fmt]:checked');
+  var m=document.querySelector('input[name=mode]:checked');
+  localStorage.setItem('wn:state',JSON.stringify({input:inp.value,g:g?g.value:'',f:f?f.value:'epub',m:m?m.value:'translate'}));
+}
 function pickGlossary(v){
+  syncGlossaryUI();
+  saveState();
   var isNew=v==='__new__';
   var n=document.getElementById('newg');
   if(n){n.style.display=isNew?'':'none';}
@@ -726,12 +762,13 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     if not valid:
         choice = default_glossary(current) if current else "__new__"
     options = "".join(
-        f'<option value="{html.escape(name)}"{" selected" if name == choice else ""}>{html.escape(name)}</option>'
+        f'<option value="{html.escape(name)}" data-empty="{0 if load_glossary(ROOT / "glossary" / name) else 1}"'
+        f'{" selected" if name == choice else ""}>{html.escape(name)}</option>'
         for name in choices
     )
     if choice not in choices and choice != "__new__":
         options += f'<option value="{html.escape(choice)}" selected>{html.escape(choice)} (baru)</option>'
-    options += f'<option value="__new__"{" selected" if choice == "__new__" else ""}>(glosarium baru)</option>'
+    options += f'<option value="__new__" data-empty="1"{" selected" if choice == "__new__" else ""}>(glosarium baru)</option>'
     is_new = choice == "__new__"
     editor_style = "display:none" if is_new else ""
     editor = (
@@ -739,9 +776,9 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f'href="/glossary?file={url_quote("glossary/" + choice)}">Edit glosarium yang dipilih</a></p>'
     )
     glossary_banner = (
-        "<div class='warn-banner'>⚠ Glosarium ini belum punya arti. Nama akan tetap dalam bahasa Inggris sampai diisi.</div>"
-        if (is_new or not load_glossary(ROOT / "glossary" / choice))
-        else ""
+        "<div class='warn-banner' id='gbanner'"
+        + ("" if (is_new or not load_glossary(ROOT / "glossary" / choice)) else " style='display:none'")
+        + ">⚠ Glosarium ini belum punya arti. Nama akan tetap dalam bahasa Inggris sampai diisi.</div>"
     )
     new_style = "" if is_new else "display:none"
     rename_style = "display:none" if is_new else ""

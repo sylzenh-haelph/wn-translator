@@ -301,3 +301,12 @@ def test_animated_background_is_rendered():
     markup = page()
     assert 'class="geo"' in markup
     assert "trackScroll" in markup
+
+
+def test_glossary_banner_and_state_persistence_are_rendered():
+    from ui.server import page
+
+    markup = page()
+    assert "gbanner" in markup
+    assert "wn:state" in markup
+    assert "data-empty" in markup
