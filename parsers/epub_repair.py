@@ -1,14 +1,28 @@
-"""Perbaikan kecil pada EPUB sumber: tanda kutip atribut yang hilang sebelum '/>'."""
+"""Perbaikan kecil pada EPUB sumber sebelum dibangun ulang."""
 import re
 import sys
 import zipfile
 from pathlib import Path
 
-PATTERN = re.compile(r'(="[^"<>\n]*?)/>')
+QUOTE_PATTERN = re.compile(r'(="[^"<>\n]*?)/>')
+IMG_PATTERN = re.compile(r"<img\b([^>]*?)(/?)>")
+IMG_CSS = "display:block;margin:0 auto;width:100%;height:auto"
 
 
 def repair_text(text):
-    return PATTERN.subn(r'\1"/>', text)
+    return QUOTE_PATTERN.subn(r'\1"/>', text)
+
+
+def center_images(text):
+    def fix(match):
+        attrs, slash = match.group(1), match.group(2)
+        if re.search(r'\sstyle="', attrs):
+            attrs = re.sub(r'(\sstyle=")', r"\1" + IMG_CSS + ";", attrs, count=1)
+        else:
+            attrs = attrs + f' style="{IMG_CSS}"'
+        return f"<img{attrs}{slash}>"
+
+    return IMG_PATTERN.subn(fix, text)
 
 
 def repair_epub(src, dst):
@@ -21,9 +35,10 @@ def repair_epub(src, dst):
             if info.filename.lower().endswith((".xhtml", ".html", ".htm")):
                 text = data.decode("utf-8", "ignore")
                 repaired, count = repair_text(text)
-                if count:
-                    fixed += count
-                    data = repaired.encode("utf-8")
+                centered, _ = center_images(repaired)
+                fixed += count
+                if centered != text:
+                    data = centered.encode("utf-8")
             target.writestr(info, data)
     return fixed
 

@@ -4,7 +4,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from parsers.epub_repair import repair_epub, repair_text
+from parsers.epub_repair import center_images, repair_epub, repair_text
+
+CSS = "display:block;margin:0 auto;width:100%;height:auto"
 
 
 def test_repair_text_closes_missing_quote():
@@ -19,7 +21,17 @@ def test_valid_markup_is_untouched():
     assert count == 0
 
 
-def test_repair_epub_writes_fixed_copy(tmp_path):
+def test_center_images_adds_style_when_missing():
+    text, _ = center_images('<img src="a.jpg"/>')
+    assert text == f'<img src="a.jpg" style="{CSS}"/>'
+
+
+def test_center_images_keeps_existing_style():
+    text, _ = center_images('<img style="color:red" src="a.jpg"/>')
+    assert text == f'<img style="{CSS};color:red" src="a.jpg"/>'
+
+
+def test_repair_epub_writes_fixed_and_centered_copy(tmp_path):
     src = tmp_path / "bad.epub"
     with ZipFile(src, "w") as z:
         z.writestr("mimetype", "application/epub+zip")
@@ -27,5 +39,7 @@ def test_repair_epub_writes_fixed_copy(tmp_path):
     dst = tmp_path / "out" / "bad.epub"
     assert repair_epub(src, dst) == 1
     with ZipFile(dst) as z:
-        assert z.read("OEBPS/Text/s.html").decode("utf-8") == '<img src="../Images/a.jpg"/>'
+        html = z.read("OEBPS/Text/s.html").decode("utf-8")
+    assert '"../Images/a.jpg"' in html
+    assert CSS in html
     assert src.exists()

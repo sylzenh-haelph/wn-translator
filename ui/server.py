@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from ui.glossary_page import STYLE, glossary_page, save_glossary  # noqa: E402
+from translation.glossary import load_glossary  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -104,6 +105,13 @@ details.cfg.locked>*:not(summary){opacity:.45;pointer-events:none;filter:graysca
 .fabbar button.stop{background:#c5221f;border-color:#c5221f;color:#fff;font-weight:bold}
 .fabbar button.go{background:var(--accent);color:#101418;border-color:var(--accent);font-weight:bold}
 .fabbar button.busy{opacity:.6}
+:root{--grad:linear-gradient(135deg,#8ab4f8 0%,#a68cf5 55%,#f28bc4 100%);--grad-stop:linear-gradient(135deg,#ff6b6b 0%,#c5221f 100%)}
+button{background:linear-gradient(135deg,#2a2f3a,#1b2030)}
+button[type=submit],.seg .thumb,.fill,.switch input:checked + .slider{background:var(--grad)}
+.fabbar button.go{background:var(--grad);color:#101418;border-color:transparent}
+.fabbar button.stop{background:var(--grad-stop);color:#fff;border-color:transparent}
+.warn-banner{background:linear-gradient(135deg,#4a1d0c,#2b1208);border:2px solid #ff8a3d;color:#ffe2c4;font-weight:bold;padding:10px 12px;border-radius:10px;margin:8px 0;box-shadow:0 0 12px rgba(255,138,61,.35)}
+.msg-warn{color:#ffb36b;font-weight:bold;background:linear-gradient(90deg,#3d1f0e,#241009);border:1px solid #ff8a3d;border-radius:8px;padding:8px 10px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -698,6 +706,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f'<p><a id="editlink" style="{editor_style}" '
         f'href="/glossary?file={url_quote("glossary/" + choice)}">Edit glosarium yang dipilih</a></p>'
     )
+    glossary_banner = (
+        "<div class='warn-banner'>⚠ Glosarium ini belum punya arti. Nama akan tetap dalam bahasa Inggris sampai diisi.</div>"
+        if (is_new or not load_glossary(ROOT / "glossary" / choice))
+        else ""
+    )
     new_style = "" if is_new else "display:none"
     rename_style = "display:none" if is_new else ""
     stem = current.stem if current else ""
@@ -735,7 +748,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
             f"<td>{r['done']}/{r['total']}</td><td>{file_cell}</td></tr>"
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
-    listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports)
+    listing = "".join(f'<li><a href="/file/{url_quote(key)}">{html.escape(key)}</a></li>' for key in exports if "_chapters/" not in key)
 
     mode_inputs = "".join(
         f'<input type="radio" id="m-{key}" name="mode" value="{key}"'
@@ -778,6 +791,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         progress_block = ""
 
     state = "berjalan" if running else "berhenti"
+    msg_class = "msg-warn" if message.startswith(("Gagal", "Peringatan")) else "muted"
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
     refresh = ""
@@ -795,7 +809,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     fabbar = f"<div class='fabbar' id='fabbar'>{fab_btn}</div>"
     status_block = (
         f"<section id='status'><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
-        f"<p class='muted'>{html.escape(message)}</p>"
+        f"<p class='{msg_class}'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
         '</section>'
     )
@@ -824,6 +838,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 <label>Glosarium</label>
 <select name="glossary" id="gsel" onchange="pickGlossary(this.value)">{options}</select>
+{glossary_banner}
 <div id="newg" style="{new_style}">
 <input type="text" name="glossary_new" value="{html.escape(stem)}" placeholder="nama glosarium baru" onkeydown="{NO_ENTER}">
 <p class="muted">Nama untuk glosarium baru. Dibuat saat proses dimulai.</p>
