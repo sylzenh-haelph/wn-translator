@@ -327,14 +327,16 @@ def chunk_totals(input_path, project):
     path = project / "chunk_totals.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
+    from config.settings import load_config
     from main import DocumentChapterSplitter, parse_document
     from translation.chunker import build_chunks
 
+    max_tokens = load_config(project_dir=project).max_chunk_tokens
     document = parse_document(input_path)
     totals = {}
     for chapter in DocumentChapterSplitter().split(document):
         if chapter.paragraphs:
-            totals[chapter.chapter_id] = len(build_chunks(chapter.paragraphs))
+            totals[chapter.chapter_id] = len(build_chunks(chapter.paragraphs, max_tokens=max_tokens))
     project.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(totals), encoding="utf-8")
     return totals
