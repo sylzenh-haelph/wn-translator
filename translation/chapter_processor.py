@@ -73,14 +73,19 @@ class ChapterProcessor:
                 results.append(processed)
                 continue
 
-            processed = self._process_chunk(
-                chunk=chunk,
-                chapter_context=chapter_context,
-                context_state=current_state,
-                entity_resolutions=(
-                    entity_resolutions or []
-                ),
-            )
+            paragraph_texts = getattr(chunk, "paragraph_texts", None)
+            if paragraph_texts is not None and not any(paragraph_texts):
+                # shortcut: chunk kosong (pemisah adegan atau gambar) tidak dikirim ke model
+                processed = self._blank_chunk(chunk, current_state)
+            else:
+                processed = self._process_chunk(
+                    chunk=chunk,
+                    chapter_context=chapter_context,
+                    context_state=current_state,
+                    entity_resolutions=(
+                        entity_resolutions or []
+                    ),
+                )
 
             current_state = (
                 processed.context_state
@@ -118,6 +123,20 @@ class ChapterProcessor:
             )
 
         return results
+
+    @staticmethod
+    def _blank_chunk(chunk, context_state):
+        return ProcessedChunk(
+            chunk_id=chunk.chunk_id,
+            translation="",
+            paragraph_translations=[""] * len(chunk.paragraph_ids),
+            context_state=context_state if context_state is not None else ContextState(),
+            attempts=0,
+            qa_passed=True,
+            flagged=False,
+            issues=[],
+            cache_hit=False,
+        )
 
     @staticmethod
     def _get_completed_chunks(progress):
