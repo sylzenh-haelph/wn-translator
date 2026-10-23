@@ -121,6 +121,12 @@ function copyLog(btn){
   if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done,fallback);}
   else{fallback();}
 }
+function toggleAll(btn){
+  var boxes=document.querySelectorAll('input[name=ch]');
+  var allOn=boxes.length>0&&Array.prototype.every.call(boxes,function(b){return b.checked;});
+  Array.prototype.forEach.call(boxes,function(b){b.checked=!allOn;});
+  btn.textContent=allOn?'Pilih semua':'Kosongkan';
+}
 function toStop(){
   var b=document.getElementById('stop-btn');
   if(!b){return;}
@@ -832,7 +838,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </details>
 {log_block}
 <section>
-<div class='rowbox head'><h3>Chapter</h3></div>
+<div class='rowbox head'><h3>Chapter</h3><button type='button' onclick='toggleAll(this)'>Pilih semua</button></div>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>

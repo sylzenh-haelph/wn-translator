@@ -285,3 +285,11 @@ def test_retire_progress_moves_selected_chapters(tmp_path):
     assert retire_progress(tmp_path, {2}) == 2
     assert not (progress / 'chapter_002.json').exists()
     assert (progress / 'chapter_003.json').exists()
+
+
+def test_chapter_select_all_button_is_rendered():
+    from ui.server import page
+
+    markup = page()
+    assert "toggleAll(this)" in markup
+    assert "function toggleAll" in markup
