@@ -293,3 +293,11 @@ def test_chapter_select_all_button_is_rendered():
     markup = page()
     assert "toggleAll(this)" in markup
     assert "function toggleAll" in markup
+
+
+def test_animated_background_is_rendered():
+    from ui.server import page
+
+    markup = page()
+    assert 'class="geo"' in markup
+    assert "trackScroll" in markup

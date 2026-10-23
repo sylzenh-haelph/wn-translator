@@ -112,6 +112,31 @@ button[type=submit],.seg .thumb,.fill,.switch input:checked + .slider{background
 .fabbar button.stop{background:var(--grad-stop);color:#fff;border-color:transparent}
 .warn-banner{background:linear-gradient(135deg,#4a1d0c,#2b1208);border:2px solid #ff8a3d;color:#ffe2c4;font-weight:bold;padding:10px 12px;border-radius:10px;margin:8px 0;box-shadow:0 0 12px rgba(255,138,61,.35)}
 .msg-warn{color:#ffb36b;font-weight:bold;background:linear-gradient(90deg,#3d1f0e,#241009);border:1px solid #ff8a3d;border-radius:8px;padding:8px 10px}
+body{background:linear-gradient(120deg,#11141d 0%,#161a2b 30%,#1a1528 55%,#10201e 80%,#11141d 100%)!important;background-size:400% 400%;animation:bgdrift 18s ease-in-out infinite}
+@keyframes bgdrift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+body>*:not(.geo):not(.fabbar){position:relative;z-index:1}
+section,details.cfg,details.sess{background:rgba(26,28,40,.55)!important;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+details.sess{background:rgba(18,18,18,.45)!important}
+.fabbar{background:rgba(18,18,18,.82)!important;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.geo{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.par{position:absolute;transform:translateY(calc(var(--sy,0) * var(--f) * -0.4px));will-change:transform}
+.sh{display:block;position:absolute;opacity:.16;animation:drift 26s ease-in-out infinite alternate}
+.sh.c{border-radius:50%}
+.sh.sq{border-radius:20%}
+.sh.tri{clip-path:polygon(50% 0,100% 100%,0 100%)}
+.sh.hex{clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+.sh.ring{border-radius:50%;background:transparent!important;border:4px solid}
+.k1{width:200px;height:200px;background:#8ab4f8;animation-duration:30s}
+.k2{width:120px;height:120px;background:#a68cf5;animation-duration:22s;animation-delay:-6s}
+.k3{width:140px;height:140px;background:#f28bc4;animation-duration:26s;animation-delay:-3s}
+.k4{width:160px;height:160px;background:#81c995;animation-duration:34s;animation-delay:-10s}
+.k5{width:80px;height:80px;background:#f6b26b;animation-duration:20s;animation-delay:-4s}
+.k6{width:150px;height:150px;color:#8ab4f8;animation-duration:28s;animation-delay:-12s}
+.k7{width:110px;height:110px;background:#81c995;animation-duration:24s;animation-delay:-8s}
+.k8{width:70px;height:70px;background:#f28bc4;animation-duration:18s;animation-delay:-2s}
+.k9{width:90px;height:90px;background:#a68cf5;animation-duration:32s;animation-delay:-14s}
+.k10{width:260px;height:260px;background:#8ab4f8;opacity:.07;animation-duration:40s;animation-delay:-20s}
+@keyframes drift{0%{transform:translate3d(0,0,0) rotate(0deg)}50%{transform:translate3d(22px,-30px,0) rotate(25deg)}100%{transform:translate3d(-18px,20px,0) rotate(-15deg)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -135,6 +160,13 @@ function toggleAll(btn){
   Array.prototype.forEach.call(boxes,function(b){b.checked=!allOn;});
   btn.textContent=allOn?'Pilih semua':'Kosongkan';
 }
+function trackScroll(){
+  var root=document.documentElement;
+  var update=function(){root.style.setProperty('--sy',String(window.scrollY));};
+  window.addEventListener('scroll',update,{passive:true});
+  update();
+}
+trackScroll();
 function toStop(){
   var b=document.getElementById('stop-btn');
   if(!b){return;}
@@ -872,6 +904,18 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <title>Converise EN»ID</title>
 <style>{STYLE}{EXTRA_STYLE}</style>
 </head><body data-running='{'1' if running else '0'}'>
+<div class="geo" aria-hidden="true">
+<span class="par" style="--f:.10;top:6%;left:4%"><i class="sh c k1"></i></span>
+<span class="par" style="--f:.25;top:20%;right:4%"><i class="sh sq k2"></i></span>
+<span class="par" style="--f:.18;top:42%;left:66%"><i class="sh tri k3"></i></span>
+<span class="par" style="--f:.30;top:58%;left:4%"><i class="sh hex k4"></i></span>
+<span class="par" style="--f:.12;top:74%;right:10%"><i class="sh c k5"></i></span>
+<span class="par" style="--f:.20;top:10%;left:52%"><i class="sh ring k6"></i></span>
+<span class="par" style="--f:.22;top:86%;left:28%"><i class="sh tri k7"></i></span>
+<span class="par" style="--f:.15;top:50%;right:36%"><i class="sh sq k8"></i></span>
+<span class="par" style="--f:.28;top:92%;left:74%"><i class="sh hex k9"></i></span>
+<span class="par" style="--f:.08;top:30%;left:36%"><i class="sh c k10"></i></span>
+</div>
 <h1>Converise EN»ID</h1>
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
