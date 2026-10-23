@@ -20,7 +20,7 @@ def _local_name(tag):
 
 
 def _format_run(run):
-    text = run.text
+    text = escape(run.text)
 
     if run.formatting.get("superscript"):
         text = f"<sup>{text}</sup>"
