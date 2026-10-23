@@ -1,79 +1,54 @@
-# WN Translator
+# Converise EN»ID
 
-Personal AI-assisted translator for English WN/LN documents into Indonesian.
+Terjemahan novel Inggris ke Indonesia dengan AI (Gemini dan Gemma), dengan antarmuka lokal yang bisa dibuka dari HP.
 
-## Current workflow
+## Alur
 
-EPUB/DOCX
-→ Parser
-→ Document IR
-→ Chapter Splitter
-→ Entity Detection
-→ Entity Resolution / Research
-→ Chapter Context
-→ Hybrid Chunker
-→ Gemini/Gemma Translation
-→ Rule-Based QA
-→ Automatic Retry
-→ Progress Save
-→ Document Reconstruction
-→ EPUB/DOCX
+EPUB/DOCX -> parser -> pemisah chapter -> riset entitas (opsional, Tavily) -> glosarium -> chunking -> terjemahan -> QA aturan -> retry -> progres per chunk -> rakit ulang -> EPUB/DOCX
 
-## Current architecture
+## Cara menjalankan
 
-- `models/` — internal document representation
-- `parsers/` — EPUB/DOCX parsing
-- `research/` — entity detection, resolution, glossary, research
-- `translation/` — context, chunking, translation, chapter/project pipeline
-- `qa/` — deterministic quality checks and retry control
-- `storage/` — glossary, rules, and progress persistence
-- `reconstruction/` — EPUB/DOCX output reconstruction
-- `tests/` — integration and fidelity tests
-- `progress/` — runtime progress state (ignored by Git)
-- `output/` — generated translations (ignored by Git)
+    pip install -r requirements.txt
+    export GEMINI_API_KEY="..."
+    export TAVILY_API_KEY="..."   # opsional; tanpa ini matikan riset dengan WN_RESEARCH_ENABLED=0
+    python ui/server.py
 
-## Supported input
+Buka http://127.0.0.1:8765 di browser. Server hanya bisa diakses dari perangkat itu sendiri.
 
-- EPUB
-- DOCX
+Contoh lewat CLI:
 
-## Supported output
+    python main.py input/novel.epub -o temp/novel.epub --project-dir temp/novel_project --chapter 2-5
+    python main.py input/novel.epub --scan-glossary glossary/novel.txt --project-dir temp/novel_project
 
-- EPUB
-- DOCX
+## Struktur
 
-## Models
+- main.py: pipeline CLI untuk terjemahan, scan glosarium, dan ekspor chapter
+- ui/: antarmuka lokal dan halaman editor glosarium
+- parsers/: parser EPUB/DOCX dan perbaikan EPUB sumber
+- research/: deteksi dan riset entitas
+- translation/: chunking, terjemahan, refinement, penerjemah judul, dan pipeline project
+- qa/: pemeriksaan aturan dan kontrol retry
+- storage/: progres, cache, dan statistik
+- reconstruction/: rakit ulang EPUB/DOCX
+- config/: pengaturan dan batas retry
+- tests/: tes utama
+- tests/legacy/: tes lama yang dipindah dari root; tetap dijalankan
+- docs/shortcuts.md: daftar keputusan sementara di kode
 
-The project is designed around:
+## Data lokal (tidak di Git)
 
-- Gemini
-- Gemma
+- input/: novel asli. Hanya fixture tes yang ikut di Git.
+- glossary/: glosarium per novel. Cadangan dibuat lewat tombol Backup data di UI.
+- temp/: progres, cache, log, dan hasil build.
 
-## Security
+## Tes
 
-API keys must be provided through the `GEMINI_API_KEY` environment variable.
+    pytest
 
-Do not commit API keys, `.env` files, generated translations, or runtime progress data.
+## Keamanan
 
-## Development
+API key diambil dari environment variable dan tidak boleh di-commit. File .env sudah diabaikan oleh Git.
 
-The project is currently under active development.
+## Status
 
-## Cara instalasi
-
-```
-pip install -r requirements.txt
-```
-
-Set API key di environment:
-
-```
-export GEMINI_API_KEY="..."
-export TAVILY_API_KEY="..."   # untuk riset entitas; tanpa ini matikan dengan WN_RESEARCH_ENABLED=0
-```
-
-Jalankan tes:
-
-```
-pytest
-```
+Dalam pengembangan aktif.
