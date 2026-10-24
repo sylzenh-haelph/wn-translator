@@ -372,19 +372,27 @@ def scan_bar(state, key=""):
     )
 
 
-def novel_title(stem):
-    for path in (ROOT / "input").glob(f"{stem}.epub"):
-        try:
-            with zipfile.ZipFile(path) as archive:
-                for name in archive.namelist():
-                    if name.lower().endswith(".opf"):
-                        text = archive.read(name).decode("utf-8", "ignore")
-                        match = re.search(r"<dc:title[^>]*>([^<]+)</dc:title>", text)
-                        if match:
-                            return html.unescape(match.group(1)).strip()
-        except (OSError, zipfile.BadZipFile):
-            return None
+def novel_title_for(path):
+    if path is None or Path(path).suffix.lower() != ".epub":
+        return None
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for name in archive.namelist():
+                if name.lower().endswith(".opf"):
+                    text = archive.read(name).decode("utf-8", "ignore")
+                    match = re.search(r"<dc:title[^>]*>([^<]+)</dc:title>", text)
+                    if match:
+                        return html.unescape(match.group(1)).strip()
+    except (OSError, zipfile.BadZipFile):
+        return None
     return None
+
+
+def novel_title(stem):
+    data = _load_sources()
+    if stem in data:
+        return novel_title_for(Path(data[stem]))
+    return novel_title_for(ROOT / "input" / f"{stem}.epub")
 
 
 def download_name(key, target):
@@ -734,15 +742,108 @@ def visible_rows(rows, book_title):
     return [r for r in rows if not is_matter(r["title"], book_title)]
 
 
+ALLOWED_STORAGE = Path("/storage/emulated/0")
+SOURCES_FILE = ROOT / "temp" / "novel_sources.json"
+
+
+def _load_sources():
+    if not SOURCES_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def remember_source(path):
+    data = _load_sources()
+    data[path.stem] = str(path)
+    SOURCES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SOURCES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def recent_sources(limit=10):
+    found = []
+    for value in _load_sources().values():
+        path = Path(value)
+        if path.is_file() and path not in found:
+            found.append(path)
+    return found[-limit:]
+
+
 def safe_input(value):
-    path = Path(value)
-    if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
-        raise ValueError("input harus file .epub atau .docx di folder input/")
-    return path
+    raw = Path(value)
+    if not raw.is_absolute():
+        if raw.parent != Path("input") or raw.suffix.lower() not in INPUT_SUFFIXES:
+            raise ValueError("input harus file .epub atau .docx di folder input/")
+        return ROOT / raw
+    resolved = raw.resolve()
+    allowed = [ALLOWED_STORAGE.resolve(), (ROOT / "input").resolve()]
+    if not any(resolved.is_relative_to(root) for root in allowed):
+        raise ValueError("file hanya boleh dari penyimpanan HP atau folder input/")
+    if resolved.suffix.lower() not in INPUT_SUFFIXES or not resolved.is_file():
+        raise ValueError("bukan file .epub atau .docx yang ada")
+    return resolved
 
 
-def novel_files():
-    return sorted(p for p in (ROOT / "input").iterdir() if p.is_file() and p.suffix.lower() in INPUT_SUFFIXES)
+def browse_page(path_text=""):
+    storage = ALLOWED_STORAGE.resolve()
+    try:
+        current = Path(path_text).resolve() if path_text else storage
+    except OSError:
+        current = storage
+    if not current.is_dir() or not current.is_relative_to(storage):
+        current = storage
+    dirs, files = [], []
+    try:
+        for entry in sorted(current.iterdir(), key=lambda p: p.name.lower()):
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                dirs.append(entry)
+            elif entry.suffix.lower() in INPUT_SUFFIXES:
+                files.append(entry)
+    except OSError:
+        pass
+    up = ""
+    if current != storage:
+        up = f"<p><a href='/browse?path={url_quote(str(current.parent))}'>← Naik</a></p>"
+    dir_html = "".join(
+        f"<li><a href='/browse?path={url_quote(str(d))}'>📁 {html.escape(d.name)}</a></li>"
+        for d in dirs[:300]
+    )
+    file_html = "".join(
+        f"<li><a href='/?input={url_quote(str(f))}'>📖 {html.escape(f.name)}</a></li>"
+        for f in files[:300]
+    ) or "<li class='muted'>Tidak ada file .epub atau .docx</li>"
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>Cari novel</title><style>{STYLE}{EXTRA_STYLE}</style></head><body>"
+        "<h1>Cari novel</h1>"
+        f"<section><h3>{html.escape(str(current))}</h3>{up}"
+        f"<ul>{dir_html}</ul><h3>Novel di folder ini</h3><ul>{file_html}</ul>"
+        "<p><a href='/'>← Kembali ke halaman utama</a></p></section></body></html>"
+    )
+
+
+def novel_files(extra=None):
+    found = sorted(p for p in (ROOT / "input").iterdir() if p.is_file() and p.suffix.lower() in INPUT_SUFFIXES)
+    for path in recent_sources():
+        if path not in found:
+            found.append(path)
+    if extra is not None and extra not in found:
+        found.append(extra)
+    return found
+
+
+def source_ref(path):
+    try:
+        path.relative_to(ROOT / "input")
+        return f"input/{path.name}"
+    except ValueError:
+        return str(path)
 
 
 def glossary_files():
@@ -860,12 +961,16 @@ def job_running():
 def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", skip_research=False):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
+    repaired = quote(f"temp/repaired/{input_path.stem}.epub")
     if input_path.suffix.lower() == ".epub":
-        repaired = quote(f"temp/repaired/{input_path.stem}.epub")
-        prepare = f"mkdir -p temp/repaired && python -m parsers.epub_repair {source} {repaired} && "
-        source = repaired
+        prepare = (
+            f"mkdir -p temp/repaired; rm -f {repaired}; "
+            f"python -m parsers.epub_repair {source} {repaired}; "
+            f"if [ -f {repaired} ]; then WN_SRC={repaired}; else WN_SRC={source}; fi; "
+        )
     else:
-        prepare = ""
+        prepare = f"WN_SRC={source}; "
+    source = '"$WN_SRC"'
     glossary = quote(f"glossary/{glossary_name}")
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
@@ -893,6 +998,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
         f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
         + done_script
+        + f"rm -f {repaired}; "
         + "termux-wake-unlock 2>/dev/null"
     )
 
@@ -919,6 +1025,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
         # shortcut: novel baru memakai chunk lebih besar; novel yang sudah berjalan tidak diubah karena progresnya bergantung pada batas chunk lama
         _new_project.mkdir(parents=True, exist_ok=True)
         (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
+    remember_source(input_path)
     JOB_MODE.write_text(mode, encoding="utf-8")
     notify("WN Translator", "Proses dimulai: " + mode)
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
@@ -1017,10 +1124,16 @@ def state_location(selected, choice, fmt, mode, out_name, msg, research="1"):
 def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name="", research="1"):
     fmt = fmt if fmt in FORMATS else "epub"
     mode = mode if mode in MODES else "translate"
-    novels = novel_files()
-    current = next((p for p in novels if f"input/{p.name}" == selected), novels[0] if novels else None)
+    extra = None
+    if selected.startswith("/"):
+        try:
+            extra = safe_input(selected)
+        except ValueError:
+            extra = None
+    novels = novel_files(extra)
+    current = next((p for p in novels if source_ref(p) == selected), extra or (novels[0] if novels else None))
     novel_options = "".join(
-        f'<option value="input/{html.escape(p.name)}"{" selected" if p == current else ""}>'
+        f'<option value="{html.escape(source_ref(p))}"{" selected" if p == current else ""}>'
         f"{html.escape(p.name)}</option>"
         for p in novels
     )
@@ -1050,13 +1163,13 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     new_style = "" if is_new else "display:none"
     rename_style = "display:none" if is_new else ""
     stem = current.stem if current else ""
-    input_param = url_quote(f"input/{current.name}") if current else ""
+    input_param = url_quote(source_ref(current)) if current else ""
     rows = (read_chapters(project_for(current)) or preview_chapters_safe(current, project_for(current))) if current else []
     running = job_running()
     job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
     exports = files()
 
-    book_title = (novel_title(stem) or stem) if current else ""
+    book_title = (novel_title_for(current) or stem) if current else ""
     rows = visible_rows(rows, book_title)
     cache_file = project_for(current) / "chunk_totals.json" if current else None
     totals = chunk_totals_safe(current, project_for(current)) if (current and (running or cache_file.exists())) else None
@@ -1171,6 +1284,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <summary>Mulai proses</summary>
 <label>Novel</label>
 <select name="input" onchange="go('input='+encodeURIComponent(this.value))">{novel_options}</select>
+<p><a href='/browse?path=/storage/emulated/0/Download'>Cari novel di HP</a></p>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label>
 <div class="seg tri">{mode_inputs}<span class="thumb"></span></div>
@@ -1288,6 +1402,8 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("rs", ["1"])[0],
                 ),
             )
+        elif url.path == "/browse":
+            self._send(200, browse_page(query.get("path", [""])[0]))
         elif url.path == "/glossary":
             self._send(200, glossary_page(query.get("file", [""])[0], query.get("msg", [""])[0]))
         elif url.path.startswith("/file/"):
