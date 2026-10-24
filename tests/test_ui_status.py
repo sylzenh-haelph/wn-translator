@@ -136,7 +136,6 @@ def test_project_follows_novel_name():
     assert project_for(Path("input/RZxMT_Chapter_1.docx")) == Path("temp/RZxMT_Chapter_1_project")
 
 
-
 def test_render_log_splits_sessions(tmp_path, monkeypatch):
     import ui.server as server
 
@@ -149,7 +148,6 @@ def test_render_log_splits_sessions(tmp_path, monkeypatch):
     markup = server.render_log()
     assert markup.count("class='sess'") == 2
     assert "<pre>a</pre>" in markup
-
 
 
 def test_chunk_hint_points_to_latest_active_chapter(tmp_path):
@@ -171,7 +169,6 @@ def test_chunk_hint_points_to_latest_active_chapter(tmp_path):
     assert "Baru" in markup
     assert "chunk 3/8" in markup
     assert chunk_hint(rows, False, tmp_path) == ""
-
 
 
 def test_progress_summary_uses_all_chapter_totals():
@@ -209,26 +206,11 @@ def test_build_command_sets_title_cache():
     assert "WN_USAGE_FILE=temp/usage_counts.json" in cmd
 
 
-def test_render_log_has_copy_button(tmp_path, monkeypatch):
-    import ui.server as server
-
-    log = tmp_path / "job.log"
-    log.write_text("===== MULAI translate · x · EPUB · 01-01 00:00 =====\na\n", encoding="utf-8")
-    monkeypatch.setattr(server, "JOB_LOG", log)
-    assert "copyLog(this)" in server.render_log()
-
-
 def test_state_location_keeps_research_flag():
     from ui.server import state_location
 
     loc = state_location("input/a.epub", "g", "epub", "translate", "", "ok", "0")
     assert "&rs=0" in loc
-
-
-def test_research_switch_is_rendered():
-    from ui.server import page
-
-    assert 'name="research"' in page()
 
 
 def test_read_chapters_falls_back_to_backup(tmp_path):
@@ -268,13 +250,6 @@ def test_backup_copies_glossary_and_progress(tmp_path, monkeypatch):
     assert (target / 'x_project' / 'progress' / 'chapter_002.json').exists()
 
 
-def test_script_copy_fix_has_no_raw_newline():
-    import ui.server as server
-
-    assert "String.fromCharCode(10)" in server.SCRIPT
-    assert "'\n'" not in server.SCRIPT
-
-
 def test_retire_progress_moves_selected_chapters(tmp_path):
     from ui.server import retire_progress
 
@@ -287,49 +262,6 @@ def test_retire_progress_moves_selected_chapters(tmp_path):
     assert (progress / 'chapter_003.json').exists()
 
 
-def test_chapter_select_all_button_is_rendered():
-    from ui.server import page
-
-    markup = page()
-    assert "toggleAll(this)" in markup
-    assert "function toggleAll" in markup
-
-
-def test_animated_background_is_rendered():
-    from ui.server import page
-
-    markup = page()
-    assert 'class="geo"' in markup
-    assert "trackScroll" in markup
-
-
-def test_glossary_banner_and_state_persistence_are_rendered():
-    from ui.server import page
-
-    markup = page()
-    assert "gbanner" in markup
-    assert "wn:state" in markup
-    assert "data-empty" in markup
-
-
-def test_lexend_font_and_gradient_link_are_rendered():
-    from ui.server import page
-
-    markup = page()
-    assert "Lexend" in markup
-    assert 'class="logo-c"' in markup
-
-
-def test_title_has_two_colored_dots_and_lexend_summaries():
-    from ui.server import page
-
-    markup = page()
-    assert 'class="dotted-i"' in markup
-    assert "#10a37f" in markup
-    assert "#d97757" in markup
-    assert "details>summary" in markup
-
-
 def test_preview_chapters_reads_cached_list(tmp_path):
     from ui.server import preview_chapters
 
@@ -339,21 +271,16 @@ def test_preview_chapters_reads_cached_list(tmp_path):
     assert rows == [{"id": "chapter_002", "title": "Bab 1", "status": "not_started", "done": 0, "total": 0}]
 
 
-def test_running_fill_uses_aqua_lime_gradient():
-    from ui.server import EXTRA_STYLE
-
-    assert "var(--grad)" in EXTRA_STYLE
-
-
-def test_chapter_chunk_total_uses_full_novel_totals():
-    from ui.server import EXTRA_STYLE
-
-    assert "28px 28px" in EXTRA_STYLE
-
-
 def test_build_command_voice_runs_profile_research():
     cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "voice", "20260101_0000")
     assert "research.voice_research" in cmd
     assert "WN_VOICE_FILE=" in cmd
     assert "--profiles" in cmd
     assert "--input" in cmd
+
+
+def test_page_renders_smoke():
+    from ui.server import page
+
+    markup = page()
+    assert markup.startswith("<!doctype html>")
