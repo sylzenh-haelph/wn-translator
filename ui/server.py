@@ -729,6 +729,11 @@ def is_matter(title, book_title):
     return bool(NON_STORY_TITLE.search(title or ""))
 
 
+def visible_rows(rows, book_title):
+    """Baris yang ditampilkan di tabel dan dihitung progresnya: bagian bukan cerita disembunyikan."""
+    return [r for r in rows if not is_matter(r["title"], book_title)]
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -1052,6 +1057,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     exports = files()
 
     book_title = (novel_title(stem) or stem) if current else ""
+    rows = visible_rows(rows, book_title)
     cache_file = project_for(current) / "chunk_totals.json" if current else None
     totals = chunk_totals_safe(current, project_for(current)) if (current and (running or cache_file.exists())) else None
     table = ""

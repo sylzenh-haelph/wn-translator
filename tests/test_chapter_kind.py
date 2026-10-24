@@ -27,3 +27,17 @@ def test_non_story_keywords_are_matter():
 
 def test_map_word_inside_other_word_is_not_matter():
     assert is_matter("Mapping the Demon Realm", "") is False
+
+
+def test_visible_rows_hides_matter_only():
+    from ui.server import visible_rows
+
+    book = 'Mushoku Tensei: Jobless Reincarnation Vol. 17'
+    rows = [
+        {'id': 'chapter_001', 'title': book},
+        {'id': 'chapter_002', 'title': 'Chapter 1:The Road to Asura'},
+        {'id': 'chapter_017', 'title': 'Colour Gallery'},
+        {'id': 'chapter_018', 'title': book},
+    ]
+    kept = [r['id'] for r in visible_rows(rows, book)]
+    assert kept == ['chapter_002']
