@@ -679,6 +679,51 @@ def name_check_block(project):
     return f"<section><h3>Cek nama</h3><ul>{rows}</ul>{more}</section>"
 
 
+def compute_quality(input_path, project):
+    from config.settings import load_config
+    from main import DocumentChapterSplitter, parse_document
+    from translation.chunker import build_chunks
+    from translation.quality_report import check_quality
+
+    max_tokens = load_config(project_dir=project).max_chunk_tokens
+    document = parse_document(input_path)
+    chunks = []
+    for chapter in DocumentChapterSplitter().split(document):
+        if not chapter.paragraphs:
+            continue
+        progress = load_progress(project / "progress", chapter.chapter_id) or {}
+        stored = progress.get("chunks") if isinstance(progress.get("chunks"), dict) else {}
+        for chunk in build_chunks(chapter.paragraphs, max_tokens=max_tokens):
+            entry = stored.get(chunk.chunk_id)
+            if not isinstance(entry, dict) or not isinstance(entry.get("paragraph_translations"), list):
+                continue
+            chunks.append((chapter.chapter_id, list(chunk.paragraph_texts), list(entry["paragraph_translations"])))
+    issues = check_quality(chunks)
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "quality_report.json").write_text(json.dumps(issues, ensure_ascii=False), encoding="utf-8")
+    return issues
+
+
+def quality_block(project):
+    path = project / "quality_report.json"
+    if not path.exists():
+        return ""
+    try:
+        issues = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return ""
+    if not issues:
+        return "<section><h3>Kualitas</h3><p class='muted'>Tidak ada isu kualitas.</p></section>"
+    labels = {"inggris_lolos": "kalimat Inggris lolos", "dialog_hilang": "format dialog hilang"}
+    rows = "".join(
+        f"<li>{html.escape(issue['chapter'])}: {labels.get(issue['kind'], issue['kind'])}: "
+        f"<i>{html.escape(issue['sample'])}</i></li>"
+        for issue in issues[:25]
+    )
+    more = f"<p class='muted'>dan {len(issues) - 25} isu lainnya</p>" if len(issues) > 25 else ""
+    return f"<section><h3>Kualitas</h3><ul>{rows}</ul>{more}</section>"
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -1130,7 +1175,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </details>
 {log_block}
 <section>
-<div class='rowbox head'><h3>Chapter</h3><span><button type='button' onclick='toggleAll(this)'>Pilih semua</button> <button type='submit' formaction='/namecheck' formnovalidate>Cek nama</button></span></div>
+<div class='rowbox head'><h3>Chapter</h3><span><button type='button' onclick='toggleAll(this)'>Pilih semua</button> <button type='submit' formaction='/namecheck' formnovalidate>Cek kualitas</button></span></div>
 <label class='switch'><input type='checkbox' name='force' value='1'><span class='slider'></span><span>Tetap jalan walau kuota perkiraan kurang</span></label>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
@@ -1141,7 +1186,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         rows, running, log_text,
         f"input/{current.name}" if current else "", choice, fmt,
     )
-    namecheck_html = name_check_block(project_for(current)) if current else ""
+    namecheck_html = (name_check_block(project_for(current)) + quality_block(project_for(current))) if current else ""
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -1285,7 +1330,8 @@ class Handler(BaseHTTPRequestHandler):
                 input_path = safe_input(selected)
                 glossary_name = resolve_glossary(choice, "")
                 issues = compute_name_check(input_path, project_for(input_path), ROOT / "glossary" / glossary_name)
-                msg = f"Cek nama selesai: {len(issues)} isu."
+                quality = compute_quality(input_path, project_for(input_path))
+                msg = f"Cek selesai: {len(issues)} isu nama, {len(quality)} isu kualitas."
             elif self.path == "/backup":
                 msg = f"Backup disimpan di {backup_data()}"
             elif self.path == "/stop":
