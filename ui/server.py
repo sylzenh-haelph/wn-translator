@@ -626,6 +626,59 @@ def failed_block(rows, running, log_text, selected, choice, fmt):
     return "<section><h3>Chapter gagal</h3>" + "".join(items) + "</section>"
 
 
+def compute_name_check(input_path, project, glossary_path):
+    from config.settings import load_config
+    from main import DocumentChapterSplitter, parse_document
+    from translation.chunker import build_chunks
+    from translation.glossary import load_glossary
+    from translation.name_check import check_names
+
+    pairs = load_glossary(glossary_path)
+    max_tokens = load_config(project_dir=project).max_chunk_tokens
+    document = parse_document(input_path)
+    chunks = []
+    for chapter in DocumentChapterSplitter().split(document):
+        if not chapter.paragraphs:
+            continue
+        progress = load_progress(project / "progress", chapter.chapter_id) or {}
+        stored = progress.get("chunks") if isinstance(progress.get("chunks"), dict) else {}
+        if not stored:
+            continue
+        for chunk in build_chunks(chapter.paragraphs, max_tokens=max_tokens):
+            entry = stored.get(chunk.chunk_id)
+            if not isinstance(entry, dict):
+                continue
+            target = entry.get("translation") or "\n".join(entry.get("paragraph_translations") or [])
+            source = "\n".join(chunk.paragraph_texts)
+            chunks.append((chapter.chapter_id, source, target))
+    issues = check_names(chunks, pairs)
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "name_check.json").write_text(json.dumps(issues, ensure_ascii=False), encoding="utf-8")
+    return issues
+
+
+def name_check_block(project):
+    path = project / "name_check.json"
+    if not path.exists():
+        return ""
+    try:
+        issues = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return ""
+    if not issues:
+        return "<section><h3>Cek nama</h3><p class='muted'>Tidak ada isu nama.</p></section>"
+    labels = {"tidak_konsisten": "seharusnya", "masih_inggris": "masih Inggris"}
+    rows = ""
+    for issue in issues[:20]:
+        arrow = f" → {html.escape(issue['expected'])}" if issue["kind"] == "tidak_konsisten" else ""
+        rows += (
+            f"<li>{html.escape(issue['chapter'])}: {labels.get(issue['kind'], issue['kind'])} "
+            f"'{html.escape(issue['term'])}'{arrow}</li>"
+        )
+    more = f"<p class='muted'>dan {len(issues) - 20} isu lainnya</p>" if len(issues) > 20 else ""
+    return f"<section><h3>Cek nama</h3><ul>{rows}</ul>{more}</section>"
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -1077,7 +1130,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </details>
 {log_block}
 <section>
-<div class='rowbox head'><h3>Chapter</h3><button type='button' onclick='toggleAll(this)'>Pilih semua</button></div>
+<div class='rowbox head'><h3>Chapter</h3><span><button type='button' onclick='toggleAll(this)'>Pilih semua</button> <button type='submit' formaction='/namecheck' formnovalidate>Cek nama</button></span></div>
 <label class='switch'><input type='checkbox' name='force' value='1'><span class='slider'></span><span>Tetap jalan walau kuota perkiraan kurang</span></label>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
@@ -1088,6 +1141,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         rows, running, log_text,
         f"input/{current.name}" if current else "", choice, fmt,
     )
+    namecheck_html = name_check_block(project_for(current)) if current else ""
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -1116,6 +1170,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {status_block}
 <div id='progress'>{progress_block}</div>
 {failed_html}
+{namecheck_html}
 {form_block}
 {files_block}
 <section><h3>Data</h3><p class='muted'>Salin glosarium dan progres semua novel ke Download/wn_backup.</p><form method="post" action="/backup" onsubmit="return confirm('Buat backup sekarang?')"><button type="submit">Backup data</button></form></section>
@@ -1226,6 +1281,11 @@ class Handler(BaseHTTPRequestHandler):
                 start_job(input_path, {chapter_number}, fmt, glossary_name, "translate", out_name, skip_research=False)
                 choice = glossary_name
                 msg = f"Mengulang chapter {chapter_number}."
+            elif self.path == "/namecheck":
+                input_path = safe_input(selected)
+                glossary_name = resolve_glossary(choice, "")
+                issues = compute_name_check(input_path, project_for(input_path), ROOT / "glossary" / glossary_name)
+                msg = f"Cek nama selesai: {len(issues)} isu."
             elif self.path == "/backup":
                 msg = f"Backup disimpan di {backup_data()}"
             elif self.path == "/stop":
