@@ -19,13 +19,25 @@ def load_glossary(path):
         return []
 
     pairs = []
+    aliases = []
     for line in file.read_text(encoding="utf-8").splitlines():
         text = line.strip()
         if not text or text.startswith("#") or " = " not in text:
             continue
         left, right = (part.strip() for part in text.split(" = ", 1))
-        if left and right:
+        if not left or not right:
+            continue
+        if left.startswith("~"):
+            aliases.append((left[1:].strip(), right))
+        else:
             pairs.append((left, right))
+
+    # Alias: '~Rudy = Rudeus Greyrat' memakai terjemahan yang sama dengan 'Rudeus Greyrat'.
+    table = {left.lower(): right for left, right in pairs}
+    for alias, canonical in aliases:
+        value = table.get(canonical.lower())
+        if alias and value:
+            pairs.append((alias, value))
     return pairs
 
 
@@ -52,7 +64,7 @@ def entry_name(text):
     body = text.lstrip("#").strip() if text.startswith("#") else text
     if "=" not in body:
         return None
-    left = body.split("=", 1)[0].strip()
+    left = body.split("=", 1)[0].strip().lstrip("~").strip()
     if not left or "." in left or ":" in left:
         return None
     return left

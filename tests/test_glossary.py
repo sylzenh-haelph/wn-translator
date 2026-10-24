@@ -123,3 +123,30 @@ def test_scan_marks_new_entries_until_next_scan(tmp_path):
     merge_scan_glossary([], out, "Novel")
     assert read_meta(out)["new"] == []
     assert "Dragon God" in read_meta(out)["seen"]
+
+
+def test_alias_uses_canonical_translation(tmp_path):
+    from translation.glossary import load_glossary
+
+    file = tmp_path / 'g.txt'
+    file.write_text('Rudeus Greyrat = Rudeus Keren\n~Rudy = Rudeus Greyrat\n', encoding='utf-8')
+    pairs = dict(load_glossary(file))
+    assert pairs['Rudeus Greyrat'] == 'Rudeus Keren'
+    assert pairs['Rudy'] == 'Rudeus Keren'
+
+
+def test_alias_without_canonical_is_ignored(tmp_path):
+    from translation.glossary import load_glossary
+
+    file = tmp_path / 'g.txt'
+    file.write_text('~Rudy = Rudeus Greyrat\n', encoding='utf-8')
+    assert load_glossary(file) == []
+
+
+def test_scan_does_not_duplicate_alias(tmp_path):
+    from translation.glossary import merge_scan_glossary
+
+    file = tmp_path / 'g.txt'
+    file.write_text('~Rudy = Rudeus Greyrat\n', encoding='utf-8')
+    added = merge_scan_glossary([('Rudy', 'character')], file, 'Novel')
+    assert added == 0
