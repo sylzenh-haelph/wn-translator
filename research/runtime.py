@@ -37,8 +37,15 @@ def build_research_service(
     research_dir = project_dir / "research_data"
     research_dir.mkdir(parents=True, exist_ok=True)
 
+    series_path = os.environ.get("WN_SERIES_ENTITIES", "").strip()
+    entity_path = Path(series_path) if series_path else research_dir / "entities.json"
+    entity_path.parent.mkdir(parents=True, exist_ok=True)
+    if series_path and not entity_path.exists() and (research_dir / "entities.json").exists():
+        import shutil
+
+        shutil.copy2(research_dir / "entities.json", entity_path)
     entity_db = EntityDB(
-        path=research_dir / "entities.json"
+        path=entity_path
     )
 
     tavily_api_key = os.environ.get("TAVILY_API_KEY")
