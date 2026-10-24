@@ -3,6 +3,7 @@ from typing import Any
 
 from translation.chapter_context import ContextState
 from translation.model_client import extract_json
+from translation.voice_profiles import voice_section
 
 
 @dataclass
@@ -195,8 +196,10 @@ Return ONLY valid JSON with this structure:
             for index, paragraph in enumerate(paragraph_texts)
         )
 
-        return f"""{self.SYSTEM_PROMPT}
+        voice = voice_section(paragraph_texts)
 
+        return f"""{self.SYSTEM_PROMPT}
+{voice}
 CHAPTER CONTEXT:
 {chapter_context}
 

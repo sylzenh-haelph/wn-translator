@@ -349,3 +349,11 @@ def test_chapter_chunk_total_uses_full_novel_totals():
     from ui.server import EXTRA_STYLE
 
     assert "28px 28px" in EXTRA_STYLE
+
+
+def test_build_command_voice_runs_profile_research():
+    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "voice", "20260101_0000")
+    assert "research.voice_research" in cmd
+    assert "WN_VOICE_FILE=" in cmd
+    assert "--profiles" in cmd
+    assert "--input" in cmd
