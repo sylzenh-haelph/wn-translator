@@ -2,13 +2,11 @@
 
 import html
 from pathlib import Path
-from shutil import copy2
 from urllib.parse import quote as url_quote
 
 from translation.glossary import read_meta
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKUP_DIR = ROOT / "glossary" / ".bak"
 
 STYLE = """
 :root{color-scheme:dark;--bg:#121212;--panel:#1e1e1e;--fg:#e8e8e8;--muted:#9aa0a6;--line:#333;--accent:#5ee7ff;--ok:#7cf7b0;--warn:#f6b26b;--grad:linear-gradient(135deg,#00e5ff 0%,#7cf7b0 50%,#c6ff3d 100%)}
@@ -133,9 +131,6 @@ def save_glossary(form):
     if "=" in left:
         return f"/glossary?file={url_quote(value)}&msg={url_quote('Kata asal tidak boleh memuat tanda sama dengan.')}"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
-    if path.exists():
-        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        copy2(path, BACKUP_DIR / path.name)
     lines = rebuild(text, form) if text else []
     if left:
         lines += ["", "## tambahan", f"{left} = {right}"]

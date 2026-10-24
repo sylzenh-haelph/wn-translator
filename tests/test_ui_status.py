@@ -236,18 +236,6 @@ def test_read_chapters_survives_corrupt_progress(tmp_path):
     assert row['status'] == 'not_started'
 
 
-def test_backup_copies_glossary_and_progress(tmp_path, monkeypatch):
-    import ui.server as server
-
-    monkeypatch.setattr(server, 'ROOT', tmp_path / 'proj')
-    monkeypatch.setattr(server, 'DOWNLOAD', tmp_path / 'dl')
-    (tmp_path / 'proj' / 'glossary').mkdir(parents=True)
-    (tmp_path / 'proj' / 'glossary' / 'a.txt').write_text('Eris = Eris', encoding='utf-8')
-    (tmp_path / 'proj' / 'temp' / 'x_project' / 'progress').mkdir(parents=True)
-    (tmp_path / 'proj' / 'temp' / 'x_project' / 'progress' / 'chapter_002.json').write_text('{}', encoding='utf-8')
-    target = server.backup_data()
-    assert (target / 'glossary' / 'a.txt').exists()
-    assert (target / 'x_project' / 'progress' / 'chapter_002.json').exists()
 
 
 def test_retire_progress_moves_selected_chapters(tmp_path):

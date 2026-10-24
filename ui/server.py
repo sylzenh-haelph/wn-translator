@@ -496,21 +496,6 @@ def usage_line():
     return f"Panggilan model hari ini: {parts}"
 
 
-def backup_data():
-    import shutil
-
-    stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    target = DOWNLOAD / "wn_backup" / stamp
-    target.mkdir(parents=True, exist_ok=True)
-    if (ROOT / "glossary").exists():
-        shutil.copytree(ROOT / "glossary", target / "glossary", dirs_exist_ok=True)
-    for project in sorted((ROOT / "temp").glob("*_project")):
-        progress = project / "progress"
-        if progress.exists():
-            shutil.copytree(progress, target / project.name / "progress", dirs_exist_ok=True)
-    return target
-
-
 def retire_progress(project, numbers):
     import shutil
 
@@ -1218,7 +1203,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {namecheck_html}
 {form_block}
 {files_block}
-<section><h3>Data</h3><p class='muted'>Salin glosarium dan progres semua novel ke Download/wn_backup.</p><form method="post" action="/backup" onsubmit="return confirm('Buat backup sekarang?')"><button type="submit">Backup data</button></form></section>
 {fabbar}
 {script}
 </body></html>"""
@@ -1332,8 +1316,6 @@ class Handler(BaseHTTPRequestHandler):
                 issues = compute_name_check(input_path, project_for(input_path), ROOT / "glossary" / glossary_name)
                 quality = compute_quality(input_path, project_for(input_path))
                 msg = f"Cek selesai: {len(issues)} isu nama, {len(quality)} isu kualitas."
-            elif self.path == "/backup":
-                msg = f"Backup disimpan di {backup_data()}"
             elif self.path == "/stop":
                 stop_job()
                 msg = "Proses dihentikan."

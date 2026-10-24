@@ -38,7 +38,6 @@ Contoh lewat CLI:
 ## Data lokal (tidak di Git)
 
 - input/: novel asli. Hanya fixture tes yang ikut di Git.
-- glossary/: glosarium per novel. Cadangan dibuat lewat tombol Backup data di UI.
 - temp/: progres, cache, log, dan hasil build.
 
 ## Tes
