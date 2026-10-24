@@ -735,12 +735,20 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
     env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
+    exit_file = quote("temp/ui_job_exit")
+    done_script = (
+        "code=$(cat temp/ui_job_exit 2>/dev/null); "
+        "if [ \"$code\" = \"0\" ]; then m='Terjemahan selesai'; "
+        "else m=\"Selesai dengan error (kode $code)\"; fi; "
+        "termux-notification --id wn_job --title 'WN Translator' --content \"$m\" 2>/dev/null; "
+    )
     return (
-        f"cd {quote(str(ROOT))} && termux-wake-lock; "
-        f"{prepare}{env}python -u main.py {source} {args} "
+        f"cd {quote(str(ROOT))} && termux-wake-lock; rm -f temp/ui_job_exit; "
+        f"({prepare}{env}python -u main.py {source} {args}; echo $? > {exit_file}) "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
         f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
-        "termux-wake-unlock 2>/dev/null"
+        + done_script
+        + "termux-wake-unlock 2>/dev/null"
     )
 
 
