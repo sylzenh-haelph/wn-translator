@@ -225,7 +225,7 @@ function setFormat(v){
     var have=(tr.getAttribute('data-have')||'').split(',');
     var done=tr.getAttribute('data-done')==='1';
     var st=tr.getAttribute('data-status');
-    cb.checked=(st==='not_started')||(done&&have.indexOf(v)<0);
+    cb.checked=(st==='not_started'&&tr.getAttribute('data-matter')!=='1')||(done&&have.indexOf(v)<0);
   });
 }
 function syncGlossaryUI(){
@@ -709,6 +709,26 @@ def quality_block(project):
     return f"<section><h3>Kualitas</h3><ul>{rows}</ul>{more}</section>"
 
 
+NON_STORY_TITLE = re.compile(
+    r"\b(cover|sampul|title page|copyright|colou?r gallery|illustrations?|afterword|"
+    r"table of contents|contents|credits|map|about the author|translator'?s note|"
+    r"author'?s note|promo|bonus)\b",
+    re.IGNORECASE,
+)
+
+
+def _norm(value):
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
+def is_matter(title, book_title):
+    """True kalau judul bukan cerita: sampul, judul buku yang berulang, ilustrasi, dan sejenisnya."""
+    if book_title and _norm(title) and _norm(title).startswith(_norm(book_title)):
+        if len(_norm(title)) - len(_norm(book_title)) < 10:
+            return True
+    return bool(NON_STORY_TITLE.search(title or ""))
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -1031,6 +1051,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
     exports = files()
 
+    book_title = (novel_title(stem) or stem) if current else ""
     cache_file = project_for(current) / "chunk_totals.json" if current else None
     totals = chunk_totals_safe(current, project_for(current)) if (current and (running or cache_file.exists())) else None
     table = ""
@@ -1038,10 +1059,12 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         number = int(r["id"].split("_")[1])
         rid = html.escape(r["id"])
         row_total = totals.get(r["id"], r["total"]) if totals else r["total"]
+        matter = is_matter(r["title"], book_title)
+        title_html = html.escape(r["title"]) + (" <i class='muted'>(bukan cerita)</i>" if matter else "")
         have = chapter_files(stem, number, exports)
         have_attr = ",".join(have)
         done = r["status"] == "completed"
-        checked = " checked" if (r["status"] == "not_started" or (done and fmt not in have)) else ""
+        checked = " checked" if ((r["status"] == "not_started" and not matter) or (done and fmt not in have)) else ""
         if not done:
             file_cell = ""
         elif have:
@@ -1056,9 +1079,9 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
             label = STATUS_TEXT.get(r["status"], r["status"])
         done_attr = "1" if done else "0"
         table += (
-            f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}" data-status="{r["status"]}">'
+            f'<tr data-id="{rid}" data-done="{done_attr}" data-have="{have_attr}" data-status="{r["status"]}" data-matter="{"1" if matter else "0"}">'
             f'<td><input type="checkbox" name="ch" value="{rid}"{checked}></td>'
-            f"<td>{html.escape(r['title'])}</td><td>{label}</td>"
+            f"<td>{title_html}</td><td>{label}</td>"
             f"<td>{r['done']}/{row_total}</td><td>{file_cell}</td></tr>"
         )
     notice = "" if rows else "<p class='muted'>Belum ada daftar chapter. Mode Terjemahkan akan memproses semua chapter yang terdeteksi.</p>"
