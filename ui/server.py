@@ -589,6 +589,43 @@ def notify(title, message):
         pass
 
 
+def chapter_reasons(log_text):
+    reasons = {}
+    current = None
+    for line in log_text.splitlines():
+        match = re.match(r"\s*\[\d+/\d+\] Chapter: (.+)$", line)
+        if match:
+            current = match.group(1).strip()
+            continue
+        if current and ("WARNING" in line or "gagal" in line.lower()):
+            reasons[current] = line.strip()[:200]
+    return reasons
+
+
+def failed_block(rows, running, log_text, selected, choice, fmt):
+    if running:
+        return ""
+    failed = [r for r in rows if r["status"] == "in_progress"]
+    if not failed:
+        return ""
+    reasons = chapter_reasons(log_text)
+    items = []
+    for r in failed:
+        reason = reasons.get(r["title"], "alasan tidak tercatat di log")
+        items.append(
+            "<div class='ent'>"
+            f"<div class='asal'>{html.escape(r['title'])}</div>"
+            f"<p class='muted'>{html.escape(reason)}</p>"
+            "<form method='post' action='/retry' style='margin:0'>"
+            f"<input type='hidden' name='input' value='{html.escape(selected)}'>"
+            f"<input type='hidden' name='glossary' value='{html.escape(choice)}'>"
+            f"<input type='hidden' name='fmt' value='{html.escape(fmt)}'>"
+            f"<input type='hidden' name='ch' value='{html.escape(r['id'])}'>"
+            "<button type='submit'>Ulang chapter ini</button></form></div>"
+        )
+    return "<section><h3>Chapter gagal</h3>" + "".join(items) + "</section>"
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -1046,6 +1083,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>
 </form>"""
+    log_text = JOB_LOG.read_text(encoding="utf-8", errors="ignore") if JOB_LOG.exists() else ""
+    failed_html = failed_block(
+        rows, running, log_text,
+        f"input/{current.name}" if current else "", choice, fmt,
+    )
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -1073,6 +1115,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <p class="sub">Terjemahan novel Inggris ke Indonesia</p>
 {status_block}
 <div id='progress'>{progress_block}</div>
+{failed_html}
 {form_block}
 {files_block}
 <section><h3>Data</h3><p class='muted'>Salin glosarium dan progres semua novel ke Download/wn_backup.</p><form method="post" action="/backup" onsubmit="return confirm('Buat backup sekarang?')"><button type="submit">Backup data</button></form></section>
@@ -1175,6 +1218,14 @@ class Handler(BaseHTTPRequestHandler):
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
                 choice = glossary_name
                 msg = "Proses dimulai."
+            elif self.path == "/retry":
+                input_path = safe_input(selected)
+                glossary_name = resolve_glossary(choice, "")
+                chapter_number = int(form.get("ch", [""])[0].split("_")[1])
+                retire_progress(project_for(input_path), {chapter_number})
+                start_job(input_path, {chapter_number}, fmt, glossary_name, "translate", out_name, skip_research=False)
+                choice = glossary_name
+                msg = f"Mengulang chapter {chapter_number}."
             elif self.path == "/backup":
                 msg = f"Backup disimpan di {backup_data()}"
             elif self.path == "/stop":
