@@ -1,4 +1,4 @@
-"""Perbaikan kecil pada EPUB sumber sebelum dibangun ulang."""
+"""Perbaikan kecil pada EPUB sumber sebelum dibangun ulang. File baru hanya dibuat kalau ada yang diperbaiki."""
 import re
 import sys
 import zipfile
@@ -27,9 +27,9 @@ def center_images(text):
 
 def repair_epub(src, dst):
     fixed = 0
-    dst = Path(dst)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(src) as source, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as target:
+    changed = False
+    entries = []
+    with zipfile.ZipFile(src) as source:
         for info in source.infolist():
             data = source.read(info.filename)
             if info.filename.lower().endswith((".xhtml", ".html", ".htm")):
@@ -39,6 +39,14 @@ def repair_epub(src, dst):
                 fixed += count
                 if centered != text:
                     data = centered.encode("utf-8")
+                    changed = True
+            entries.append((info, data))
+    if not changed:
+        return 0
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as target:
+        for info, data in entries:
             target.writestr(info, data)
     return fixed
 

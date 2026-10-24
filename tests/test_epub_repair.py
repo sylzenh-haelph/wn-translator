@@ -43,3 +43,13 @@ def test_repair_epub_writes_fixed_and_centered_copy(tmp_path):
     assert '"../Images/a.jpg"' in html
     assert CSS in html
     assert src.exists()
+
+
+def test_repair_epub_skips_copy_when_nothing_to_fix(tmp_path):
+    src = tmp_path / "clean.epub"
+    with ZipFile(src, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("OEBPS/Text/s.html", "<html><body><p>Halo</p></body></html>")
+    dst = tmp_path / "out" / "clean.epub"
+    assert repair_epub(src, dst) == 0
+    assert not dst.exists()
