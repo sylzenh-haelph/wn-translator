@@ -8,7 +8,7 @@ from reconstruction.epub_validator import validate_epub
 from translation.chapter_splitter import DocumentChapterSplitter
 
 
-SOURCE = Path("/storage/emulated/0/Download/The_Silver_Gate_Test.epub")
+SOURCE = Path(__file__).resolve().parent.parent / "input" / "test.epub"
 
 
 def test_chapter_export_integration():
