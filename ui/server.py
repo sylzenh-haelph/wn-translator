@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import sys
+import os
 import zipfile
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -532,6 +533,32 @@ def retire_progress(project, numbers):
 LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
 
 
+DAILY_BUDGET = int(os.environ.get("WN_DAILY_BUDGET", "1500"))
+PRIMARY_MODEL = "gemma-4-31b-it"
+RETRY_FACTOR = 1.15
+
+
+def estimate_run_calls(input_path, numbers):
+    totals = chunk_totals_safe(input_path, project_for(input_path)) or {}
+    if numbers:
+        ids = [f"chapter_{number:03d}" for number in numbers]
+    else:
+        ids = list(totals)
+    chunks = sum(totals.get(chapter_id, 0) for chapter_id in ids)
+    return int((chunks + len(ids)) * RETRY_FACTOR)
+
+
+def quota_status(estimate):
+    used = usage_today().get(PRIMARY_MODEL, 0)
+    remaining = max(DAILY_BUDGET - used, 0)
+    return estimate, remaining, estimate > remaining
+
+
+def quota_line():
+    used = usage_today().get(PRIMARY_MODEL, 0)
+    return f"Kuota {PRIMARY_MODEL} hari ini: {used}/{DAILY_BUDGET} (perkiraan)"
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -926,6 +953,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<section id='status'><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='{msg_class}'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
+        f"<p class='muted'>{quota_line()}</p>"
         '</section>'
     )
     files_block = (
@@ -975,6 +1003,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {log_block}
 <section>
 <div class='rowbox head'><h3>Chapter</h3><button type='button' onclick='toggleAll(this)'>Pilih semua</button></div>
+<label class='switch'><input type='checkbox' name='force' value='1'><span class='slider'></span><span>Tetap jalan walau kuota perkiraan kurang</span></label>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>
@@ -1096,6 +1125,13 @@ class Handler(BaseHTTPRequestHandler):
                 rows = read_chapters(project_for(input_path)) or preview_chapters_safe(input_path, project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 skip = research_flag == "0"
+                if mode == "translate" and numbers is not False:
+                    estimate, remaining, short = quota_status(estimate_run_calls(input_path, numbers))
+                    if short and form.get("force", [""])[0] != "1":
+                        raise RuntimeError(
+                            f"Perkiraan {estimate} panggilan, sisa kuota hari ini sekitar {remaining}. "
+                            "Centang 'Tetap jalan' lalu Mulai untuk lanjut."
+                        )
                 if form.get("retry_fresh", [""])[0] == "1" and mode == "translate" and numbers:
                     retire_progress(project_for(input_path), numbers)
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
