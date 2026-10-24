@@ -27,13 +27,12 @@ JOB_MODE = ROOT / "temp" / "ui_job_mode.txt"
 STATUS_TEXT = {"not_started": "belum mulai", "in_progress": "belum selesai", "completed": "selesai"}
 INPUT_SUFFIXES = {".epub", ".docx"}
 FORMATS = ("epub", "docx")
-MODES = ("translate", "export", "scan", "voice")
-MODE_LABELS = (("translate", "Terjemahkan"), ("export", "Ekspor"), ("scan", "Scan"), ("voice", "Gaya bicara"))
+MODES = ("translate", "export", "scan")
+MODE_LABELS = (("translate", "Terjemahkan"), ("export", "Ekspor"), ("scan", "Scan"))
 HINTS = {
     "translate": "Menerjemahkan chapter yang dicentang, lalu membuat hasil penuh dalam format yang dipilih.",
     "export": "Mengekspor chapter yang sudah selesai dan dicentang ke format yang dipilih, tanpa menerjemahkan ulang.",
     "scan": "Hanya mencari nama dan istilah untuk glosarium. Tidak membuat EPUB atau DOCX.",
-    "voice": "Mencari gaya bicara tokoh yang punya dialog di web, lalu menyimpannya untuk glosarium ini. Jalankan Scan dulu. Cukup sekali per seri.",
 }
 MIME = {
     "epub": "application/epub+zip",
@@ -154,9 +153,6 @@ h1{font-size:2rem;line-height:1.15}
 .dotted-i .d2{background:#d97757;box-shadow:0 0 6px rgba(217,119,87,.6)}
 .dotted-i .d1{left:.02em;background:#10a37f;box-shadow:0 0 6px rgba(16,163,127,.6)}
 .dotted-i .d2{left:.2em;background:#d97757;box-shadow:0 0 6px rgba(217,119,87,.6)}
-.seg.tri .thumb{width:calc((100% - 8px)/4)}
-.seg.tri label{font-size:14px;padding:9px 2px}
-#m-voice:checked ~ .thumb{transform:translateX(300%)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
 
@@ -214,9 +210,9 @@ function toStop(){
 function setMode(v){
   saveState();
   var out=document.getElementById('outsec');
-  if(out){out.style.display=(v==='scan'||v==='voice')?'none':'';}
+  if(out){out.style.display=(v==='scan')?'none':'';}
   var rs=document.getElementById('rsec');
-  if(rs){rs.style.display=(v==='scan'||v==='voice')?'none':'';}
+  if(rs){rs.style.display=(v==='scan')?'none':'';}
   var h=document.getElementById('modehint');
   if(h){h.textContent=HINTS[v]||'';}
 }
@@ -669,14 +665,8 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     else:
         prepare = ""
     glossary = quote(f"glossary/{glossary_name}")
-    entry = f"main.py {source}"
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
-    elif mode == "voice":
-        profiles = quote(f"glossary/.voice/{Path(glossary_name).stem}.json")
-        title = quote(novel_title(input_path.stem) or input_path.stem)
-        entry = "-m research.voice_research"
-        args = f"--input {source} --project-dir {project} --profiles {profiles} --title {title}"
     else:
         base = out_name or f"{input_path.stem}_ui_{stamp}"
         out = quote(f"temp/{base}.{fmt}")
@@ -687,10 +677,10 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
-    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " WN_VOICE_FILE=" + quote(f"glossary/.voice/{Path(glossary_name).stem}.json") + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
+    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; "
-        f"{prepare}{env}python -u {entry} {args} "
+        f"{prepare}{env}python -u main.py {source} {args} "
         f"2>&1 | tee -a {quote(str(JOB_LOG))}; "
         f"echo \"===== SELESAI · $(date '+%d-%m %H:%M') =====\" >> {quote(str(JOB_LOG))}; "
         "termux-wake-unlock 2>/dev/null"
@@ -924,7 +914,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     cfg_open = "" if running else " open"
     lock_cls = " locked" if running else ""
     rs_checked = "" if research == "0" else " checked"
-    rs_hidden = " style='display:none'" if mode in ("scan", "voice") else ""
+    rs_hidden = " style='display:none'" if mode == "scan" else ""
     if running:
         fab_btn = ("<button type='submit' form='mainform' formaction='/stop' id='stop-btn' class='stop' "
                    "onclick='return guard(this)'>Berhenti</button>")
@@ -943,7 +933,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         + (f"<ul>{listing}</ul>" if listing else "<p class='muted'>Belum ada file hasil.</p>")
         + "</section>"
     )
-    outsec_style = " style='display:none'" if mode in ("scan", "voice") else ""
+    outsec_style = " style='display:none'" if mode == "scan" else ""
     log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
 <details class="cfg{lock_cls}"{cfg_open}>
@@ -1088,7 +1078,7 @@ class Handler(BaseHTTPRequestHandler):
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
         out_name = form.get("out_name", [""])[0]
-        research_flag = "1" if (form.get("research", [""])[0] == "1" or mode in ("scan", "voice")) else "0"
+        research_flag = "1" if (form.get("research", [""])[0] == "1" or mode == "scan") else "0"
 
         if self.path == "/glossary/rename":
             try:

@@ -271,12 +271,6 @@ def test_preview_chapters_reads_cached_list(tmp_path):
     assert rows == [{"id": "chapter_002", "title": "Bab 1", "status": "not_started", "done": 0, "total": 0}]
 
 
-def test_build_command_voice_runs_profile_research():
-    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "voice", "20260101_0000")
-    assert "research.voice_research" in cmd
-    assert "WN_VOICE_FILE=" in cmd
-    assert "--profiles" in cmd
-    assert "--input" in cmd
 
 
 def test_page_renders_smoke():
