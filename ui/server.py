@@ -559,6 +559,36 @@ def quota_line():
     return f"Kuota {PRIMARY_MODEL} hari ini: {used}/{DAILY_BUDGET} (perkiraan)"
 
 
+def eta_text(project, rows):
+    stats = project / "stats" / "translation_stats.json"
+    if not stats.exists():
+        return ""
+    try:
+        data = json.loads(stats.read_text(encoding="utf-8"))
+    except ValueError:
+        return ""
+    total_chunks = int(data.get("total_chunks") or 0)
+    done_chunks = int(data.get("completed_chunks") or 0)
+    duration = float(data.get("duration_seconds") or 0)
+    if not total_chunks or not duration or not done_chunks:
+        return ""
+    per_chunk = duration / done_chunks
+    remaining = max(total_chunks - done_chunks, 0)
+    minutes = int(per_chunk * remaining / 60)
+    return f"perkiraan sisa sekitar {minutes} menit ({per_chunk:.0f} detik per chunk)"
+
+
+def notify(title, message):
+    try:
+        subprocess.run(
+            ["termux-notification", "--id", "wn_job", "--title", title, "--content", message],
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def safe_input(value):
     path = Path(value)
     if path.parent != Path("input") or path.suffix.lower() not in INPUT_SUFFIXES:
@@ -741,12 +771,14 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
         _new_project.mkdir(parents=True, exist_ok=True)
         (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
     JOB_MODE.write_text(mode, encoding="utf-8")
+    notify("WN Translator", "Proses dimulai: " + mode)
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
 def stop_job():
     log_marker("DIHENTIKAN")
+    notify("WN Translator", "Proses dihentikan.")
     subprocess.run(["tmux", "kill-session", "-t", JOB], capture_output=True)
 
 
@@ -933,6 +965,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         progress_block = ""
 
     state = "berjalan" if running else "berhenti"
+    eta = eta_text(project_for(current), rows) if (running and current) else ""
     msg_class = "msg-warn" if message.startswith(("Gagal", "Peringatan")) else "muted"
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
