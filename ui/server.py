@@ -887,6 +887,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
         raise RuntimeError("masih ada proses yang berjalan")
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    rotate_job_log()
     log_marker(f"MULAI {mode} · {input_path.name} · {fmt.upper()}")
     _new_project = project_for(input_path)
     if not (_new_project / "chapters.json").exists() and not (_new_project / "config.json").exists():
@@ -903,6 +904,21 @@ def stop_job():
     log_marker("DIHENTIKAN")
     notify("WN Translator", "Proses dihentikan.")
     subprocess.run(["tmux", "kill-session", "-t", JOB], capture_output=True)
+
+
+def rotate_job_log(keep=20):
+    import shutil
+
+    if not JOB_LOG.exists() or JOB_LOG.stat().st_size == 0:
+        return None
+    archive_dir = ROOT / "temp" / "logs"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    target = archive_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    shutil.move(str(JOB_LOG), str(target))
+    archives = sorted(archive_dir.glob("*.log"))
+    for old in archives[:-keep]:
+        old.unlink()
+    return target
 
 
 def log_marker(text):
