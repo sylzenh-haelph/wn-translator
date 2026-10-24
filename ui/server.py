@@ -765,11 +765,6 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
         # shortcut: novel baru memakai chunk lebih besar; novel yang sudah berjalan tidak diubah karena progresnya bergantung pada batas chunk lama
         _new_project.mkdir(parents=True, exist_ok=True)
         (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
-    _new_project = project_for(input_path)
-    if not (_new_project / "chapters.json").exists() and not (_new_project / "config.json").exists():
-        # shortcut: novel baru memakai chunk lebih besar; novel yang sudah berjalan tidak diubah
-        _new_project.mkdir(parents=True, exist_ok=True)
-        (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
     JOB_MODE.write_text(mode, encoding="utf-8")
     notify("WN Translator", "Proses dimulai: " + mode)
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
@@ -967,6 +962,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     state = "berjalan" if running else "berhenti"
     eta = eta_text(project_for(current), rows) if (running and current) else ""
     msg_class = "msg-warn" if message.startswith(("Gagal", "Peringatan")) else "muted"
+    eta_html = f"<p class='muted'>{html.escape(eta)}</p>" if eta else ""
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
     refresh = ""
@@ -987,6 +983,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<p class='{msg_class}'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
         f"<p class='muted'>{quota_line()}</p>"
+        f"{eta_html}"
         '</section>'
     )
     files_block = (
