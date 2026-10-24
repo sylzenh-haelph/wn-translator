@@ -44,3 +44,4 @@ input/*
 !input/test*.docx
 glossary/
 *.bak
+*.pyc

@@ -20,24 +20,36 @@ Contoh lewat CLI:
     python main.py input/novel.epub -o temp/novel.epub --project-dir temp/novel_project --chapter 2-5
     python main.py input/novel.epub --scan-glossary glossary/novel.txt --project-dir temp/novel_project
 
+## Fitur di UI
+
+- Mode Terjemahkan, Ekspor chapter selesai, dan Scan glosarium.
+- Editor glosarium dengan pencarian, filter, urutan, dan penanda entri baru hasil scan.
+- Alias glosarium dengan awalan `~`, misalnya `~Rudy = Rudeus Greyrat`.
+- Cek nama dan cek kualitas dari hasil terjemahan yang sudah tersimpan, tanpa memanggil model.
+- Kartu chapter gagal dengan alasan dari log dan tombol ulang per chapter.
+- Pemeriksaan kuota harian sebelum proses dimulai.
+- Riset entitas dipakai bersama untuk volume dari seri yang sama lewat nama glosarium.
+
 ## Struktur
 
 - main.py: pipeline CLI untuk terjemahan, scan glosarium, dan ekspor chapter
-- ui/: antarmuka lokal dan halaman editor glosarium
+- ui/: antarmuka lokal dan editor glosarium
 - parsers/: parser EPUB/DOCX dan perbaikan EPUB sumber
 - research/: deteksi dan riset entitas
-- translation/: chunking, terjemahan, refinement, penerjemah judul, dan pipeline project
+- translation/: chunking, terjemahan, refinement, penerjemah judul, glosarium, cek nama, dan cek kualitas
 - qa/: pemeriksaan aturan dan kontrol retry
 - storage/: progres, cache, dan statistik
 - reconstruction/: rakit ulang EPUB/DOCX
 - config/: pengaturan dan batas retry
 - tests/: tes utama
 - tests/legacy/: tes lama yang dipindah dari root; tetap dijalankan
+- scripts/manual/: skrip manual yang memanggil API; tidak dijalankan pytest
 - docs/shortcuts.md: daftar keputusan sementara di kode
 
 ## Data lokal (tidak di Git)
 
 - input/: novel asli. Hanya fixture tes yang ikut di Git.
+- glossary/: glosarium per novel, termasuk hasil riset per seri di glossary/.entities/.
 - temp/: progres, cache, log, dan hasil build.
 
 ## Tes
