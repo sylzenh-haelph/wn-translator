@@ -1104,6 +1104,8 @@ def process_chapters(
                 "  QA        : FAILED - "
                 "chapter dipertahankan dalam bentuk asli"
             )
+            if chapter.chapter_id not in failed_ids:
+                failed_ids.append(chapter.chapter_id)
             if logger:
                 logger.warning(
                     f"Chapter translation failed QA: "
@@ -1340,6 +1342,17 @@ def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
     translations = translate_terms(research_client, [name for name, _ in found])
     added = merge_scan_glossary(found, output, document.title, translations)
     print(f"Glosarium: {output} | entri baru: {added}")
+
+
+def full_output_blocked(failed_chapters, flagged_chunks):
+    """Output penuh hanya dibuat kalau tidak ada chapter gagal dan tidak ada chunk flagged."""
+    reasons = []
+    failed = list(dict.fromkeys(failed_chapters))
+    if failed:
+        reasons.append("chapter gagal: " + ", ".join(failed))
+    if flagged_chunks:
+        reasons.append(f"chunk flagged: {flagged_chunks}")
+    return reasons
 
 
 def build_parser():
@@ -1806,6 +1819,18 @@ def main():
             logger.info(
                 f"Translation statistics saved: {stats_path}"
             )
+
+        print()
+        blockers = full_output_blocked(
+            translation_stats.failed_chapters,
+            summary["flagged_chunks"],
+        )
+        if blockers:
+            print()
+            print("OUTPUT PENUH TIDAK DIBUAT: " + "; ".join(blockers))
+            print("Ulangi chapter yang gagal sampai semua selesai, lalu jalankan lagi.")
+            logger.warning("Full output skipped: " + "; ".join(blockers))
+            return
 
         print()
         print(
