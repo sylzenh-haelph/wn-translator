@@ -23,6 +23,7 @@ def test_research_defaults_use_gemini_with_gemma_fallback():
     assert config.research_model == "gemini-3.1-flash-lite"
     assert parse_model_chain(config.research_fallbacks) == [
         ("gemini", "gemma-4-31b-it"),
+        ("gemini", "gemini-3-flash-preview"),
     ]
 
 
@@ -52,8 +53,10 @@ def test_research_client_has_fallback_chain(monkeypatch):
     assert created == [
         ("gemini", "gemini-3.1-flash-lite", 1, 20),
         ("gemini", "gemma-4-31b-it", 1, 20),
+        ("gemini", "gemini-3-flash-preview", 1, 20),
     ]
     assert client.labels == [
         "gemini:gemini-3.1-flash-lite",
         "gemini:gemma-4-31b-it",
+        "gemini:gemini-3-flash-preview",
     ]

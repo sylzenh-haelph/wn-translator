@@ -18,12 +18,12 @@ class AppConfig:
     translation_model: str = "gemma-4-31b-it"
     research_provider: str = "gemini"
     research_model: str = "gemini-3.1-flash-lite"
-    research_fallbacks: str = "gemini:gemma-4-31b-it"
+    research_fallbacks: str = "gemini:gemma-4-31b-it,gemini:gemini-3-flash-preview"
     refinement_provider: str = "gemini"
     refinement_model: str = "gemma-4-31b-it"
     orchestration_provider: str = "gemini"
     orchestration_model: str = "gemini-3.1-flash-lite"
-    translation_fallbacks: str = "gemini:gemini-3.1-flash-lite"
+    translation_fallbacks: str = "gemini:gemini-3.1-flash-lite,gemini:gemini-3-flash-preview"
     max_retries: int = 2
     timeout: int = 120
     backoff_base: float = 2.0

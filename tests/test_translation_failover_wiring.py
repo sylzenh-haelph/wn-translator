@@ -91,6 +91,7 @@ def test_translation_client_is_primary_then_fallbacks(monkeypatch):
     assert created == [
         ("gemini", "gemma-4-31b-it"),
         ("gemini", "gemini-3.1-flash-lite"),
+        ("gemini", "gemini-3-flash-preview"),
     ]
     assert client.labels[0] == "gemini:gemma-4-31b-it"
 
