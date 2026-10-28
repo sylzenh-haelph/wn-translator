@@ -41,3 +41,21 @@ def test_visible_rows_hides_matter_only():
     ]
     kept = [r['id'] for r in visible_rows(rows, book)]
     assert kept == ['chapter_002']
+
+
+def test_single_chapter_named_like_book_is_story():
+    from ui.server import story_flags
+
+    rows = [{'id': 'chapter_001', 'title': 'Judul Dokumen'}]
+    assert story_flags(rows, 'Judul Dokumen') == {'chapter_001': False}
+
+
+def test_multi_chapter_keeps_matter_flags():
+    from ui.server import story_flags
+
+    book = 'Judul Buku'
+    rows = [
+        {'id': 'chapter_001', 'title': book},
+        {'id': 'chapter_002', 'title': 'Chapter 1: Awal'},
+    ]
+    assert story_flags(rows, book) == {'chapter_001': True, 'chapter_002': False}

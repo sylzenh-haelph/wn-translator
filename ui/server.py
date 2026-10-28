@@ -772,6 +772,15 @@ def recent_sources(limit=10):
     return found[-limit:]
 
 
+def story_flags(rows, book_title):
+    """Tandai bagian bukan cerita. Kalau semua baris terbaca bukan cerita, berarti dokumennya
+    memang hanya satu cerita (mis. DOCX satu chapter), jadi semuanya dianggap cerita."""
+    flags = {r["id"]: is_matter(r["title"], book_title) for r in rows}
+    if rows and all(flags.values()):
+        return {rid: False for rid in flags}
+    return flags
+
+
 def safe_input(value):
     raw = Path(value)
     if not raw.is_absolute():
@@ -1170,7 +1179,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     exports = files()
 
     book_title = (novel_title_for(current) or stem) if current else ""
-    rows = visible_rows(rows, book_title)
+    matter_map = story_flags(rows, book_title)
+    rows = [r for r in rows if not matter_map[r["id"]]]
     cache_file = project_for(current) / "chunk_totals.json" if current else None
     totals = chunk_totals_safe(current, project_for(current)) if (current and (running or cache_file.exists())) else None
     table = ""
@@ -1178,7 +1188,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         number = int(r["id"].split("_")[1])
         rid = html.escape(r["id"])
         row_total = totals.get(r["id"], r["total"]) if totals else r["total"]
-        matter = is_matter(r["title"], book_title)
+        matter = matter_map.get(r["id"], False)
         title_html = html.escape(r["title"]) + (" <i class='muted'>(bukan cerita)</i>" if matter else "")
         have = chapter_files(stem, number, exports)
         have_attr = ",".join(have)
