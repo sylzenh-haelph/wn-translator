@@ -274,3 +274,9 @@ def test_state_location_keeps_mode():
 
     loc = state_location("input/a.epub", "g", "epub", "translate", "", "ok")
     assert "&m=translate" in loc
+
+
+def test_build_command_keeps_space_before_python():
+    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000")
+    assert " python -u main.py " in cmd
+    assert "'python" not in cmd

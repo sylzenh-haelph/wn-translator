@@ -873,7 +873,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
-    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json") + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json"))
+    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json") + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json") + " ")
     exit_file = quote("temp/ui_job_exit")
     done_script = (
         "code=$(cat temp/ui_job_exit 2>/dev/null); "
