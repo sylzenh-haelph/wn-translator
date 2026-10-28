@@ -1718,7 +1718,6 @@ def main():
                     processor,
                     config,
                     logger=logger,
-                    entity_service=entity_service,
                     export_chapters=args.export_chapters,
                     chapter_output_dir=chapter_output_dir,
                     output_suffix=output_path.suffix.lower(),
