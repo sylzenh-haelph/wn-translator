@@ -13,7 +13,7 @@ from translation.document_assembler import DocumentAssembler
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE_EPUB = ROOT / "test_navigation_fixture.epub"
+SOURCE_EPUB = ROOT / "tests/fixtures/test_navigation_fixture.epub"
 OUTPUT_EPUB = ROOT / "test_assembled_output.epub"
 OUTPUT_DOCX = ROOT / "test_assembled_output.docx"
 

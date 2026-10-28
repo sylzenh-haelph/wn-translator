@@ -11,7 +11,7 @@ from reconstruction.epub_reconstructor import reconstruct_epub
 
 
 BASE = Path(__file__).resolve().parent
-FIXTURE = PROJECT_ROOT / "test_structure_fixture.epub"
+FIXTURE = PROJECT_ROOT / "tests/fixtures/test_structure_fixture.epub"
 OUTPUT = BASE / "test_resource_preserved.epub"
 RESOURCE_SOURCE = BASE / "test_resource_source.epub"
 

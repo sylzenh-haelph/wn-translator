@@ -10,7 +10,7 @@ from reconstruction.epub_reconstructor import reconstruct_epub
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "test_navigation_fixture.epub"
+SOURCE = ROOT / "tests/fixtures/test_navigation_fixture.epub"
 OUTPUT = ROOT / "test_epub_ncx_translation_output.epub"
 
 NCX_NS = "http://www.daisy.org/z3986/2005/ncx"

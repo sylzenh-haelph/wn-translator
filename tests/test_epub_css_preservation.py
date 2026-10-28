@@ -9,7 +9,7 @@ from parsers.epub_parser import parse_epub
 from reconstruction.epub_reconstructor import reconstruct_epub
 
 
-FIXTURE = PROJECT_ROOT / "test_structure_fixture.epub"
+FIXTURE = PROJECT_ROOT / "tests/fixtures/test_structure_fixture.epub"
 SOURCE = PROJECT_ROOT / "test_css_source.epub"
 OUTPUT = PROJECT_ROOT / "test_css_output.epub"
 

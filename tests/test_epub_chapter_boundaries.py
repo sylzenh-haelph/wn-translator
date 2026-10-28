@@ -8,7 +8,7 @@ from translation.chapter_splitter import DocumentChapterSplitter
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "test_structure_fixture.epub"
+SOURCE = ROOT / "tests/fixtures/test_structure_fixture.epub"
 
 
 def main():

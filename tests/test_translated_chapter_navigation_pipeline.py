@@ -11,7 +11,7 @@ from translation.chapter_reconstructor import ChapterReconstructor
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "test_navigation_fixture.epub"
+SOURCE = ROOT / "tests/fixtures/test_navigation_fixture.epub"
 OUTPUT = ROOT / "test_translated_chapter_navigation_pipeline.epub"
 
 

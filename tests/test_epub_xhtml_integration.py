@@ -14,7 +14,7 @@ from reconstruction.epub_reconstructor import (
 )
 
 
-FIXTURE = ROOT / "test_structure_fixture.epub"
+FIXTURE = ROOT / "tests/fixtures/test_structure_fixture.epub"
 OUTPUT = ROOT / "test_xhtml_integration_output.epub"
 
 

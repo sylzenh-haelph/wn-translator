@@ -10,7 +10,7 @@ from models.document import Paragraph, TextRun
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "test_navigation_fixture.epub"
+SOURCE = ROOT / "tests/fixtures/test_navigation_fixture.epub"
 OUTPUT = ROOT / "test_epub_full_fidelity_output.epub"
 
 

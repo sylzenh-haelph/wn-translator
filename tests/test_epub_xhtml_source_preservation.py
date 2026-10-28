@@ -10,7 +10,7 @@ if str(ROOT) not in sys.path:
 from parsers.epub_parser import parse_epub
 
 
-FIXTURE = ROOT / "test_structure_fixture.epub"
+FIXTURE = ROOT / "tests/fixtures/test_structure_fixture.epub"
 
 
 def main():

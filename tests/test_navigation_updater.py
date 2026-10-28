@@ -12,7 +12,7 @@ from reconstruction.navigation_updater import (
 )
 
 
-FIXTURE = ROOT / "test_navigation_fixture.epub"
+FIXTURE = ROOT / "tests/fixtures/test_navigation_fixture.epub"
 
 
 def main():
