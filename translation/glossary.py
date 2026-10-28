@@ -102,26 +102,73 @@ def prune_scan_names(entries, existing_names):
     return keep
 
 
+def _series_db_path():
+    import os
+
+    value = os.environ.get("WN_SERIES_ENTITIES", "").strip()
+    return Path(value) if value else None
+
+
+def _evidence_text(item):
+    if isinstance(item, dict):
+        for key in ("snippet", "content", "text", "title"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return " ".join(value.split())[:300]
+        return ""
+    return " ".join(str(item).split())[:300]
+
+
 def translate_terms(client, names):
-    """Minta model memberi arti Indonesia. Kalau gagal, hasilnya kosong dan scan tetap jalan."""
+    """Arti dari riset (database seri) dipakai dulu. Model hanya dipanggil untuk istilah yang belum
+    punya arti, dan bukti dari web ikut dikirim sebagai dasar memilih arti. Kalau gagal, scan tetap jalan."""
     from translation.model_client import extract_json
 
     unique = list(dict.fromkeys(name.strip() for name in names if name.strip()))
     if not unique:
         return {}
-    prompt = TERM_PROMPT + "\n\nISTILAH:\n" + json.dumps(unique, ensure_ascii=False)
+
+    resolved = {}
+    evidence = {}
+    path = _series_db_path()
+    if path is not None and path.exists():
+        from research.entity_db import EntityDB
+
+        db = EntityDB(path=path)
+        for name in unique:
+            record = db.get(name)
+            if not record:
+                continue
+            if record.get("translation"):
+                resolved[name.lower()] = str(record["translation"]).strip()
+                continue
+            snippets = [_evidence_text(item) for item in (record.get("research") or [])]
+            snippets = [s for s in snippets if s][:3]
+            if snippets:
+                evidence[name] = snippets
+
+    pending = [name for name in unique if name.lower() not in resolved]
+    if not pending:
+        return resolved
+
+    prompt = TERM_PROMPT + "\n\nISTILAH:\n" + json.dumps(pending, ensure_ascii=False)
+    lines = [f"- {name}: " + " | ".join(evidence[name]) for name in pending if name in evidence]
+    if lines:
+        prompt += (
+            "\n\nBUKTI DARI WEB (pakai untuk memilih arti yang tepat, jangan disalin):\n"
+            + "\n".join(lines)
+        )
     try:
         data = extract_json(client.generate(prompt))
     except Exception as exc:
         print(f"Arti otomatis dilewati: {exc}")
-        return {}
+        return resolved
     if not isinstance(data, dict):
-        return {}
-    return {
-        str(key).strip().lower(): str(value).strip()
-        for key, value in data.items()
-        if str(value).strip()
-    }
+        return resolved
+    for key, value in data.items():
+        if str(value).strip():
+            resolved[str(key).strip().lower()] = str(value).strip()
+    return resolved
 
 
 def meta_path(path):
