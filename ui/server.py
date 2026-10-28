@@ -5,7 +5,6 @@ import json
 import re
 import subprocess
 import sys
-import os
 import zipfile
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -212,8 +211,8 @@ function setMode(v){
   saveState();
   var out=document.getElementById('outsec');
   if(out){out.style.display=(v==='scan')?'none':'';}
-  var rs=document.getElementById('rsec');
-  if(rs){rs.style.display=(v==='scan')?'none':'';}
+  var rf=document.getElementById('rfresh');
+  if(rf){rf.style.display=(v==='translate')?'':'none';}
   var h=document.getElementById('modehint');
   if(h){h.textContent=HINTS[v]||'';}
 }
@@ -263,8 +262,6 @@ function go(extra){
   var o=document.getElementById('out_name');
   var q='&m='+(m?m.value:'translate')+'&f='+(f?f.value:'epub');
   if(o&&o.value){q+='&o='+encodeURIComponent(o.value);}
-  var rs=document.querySelector('input[name=research]');
-  q+='&rs='+(rs&&!rs.checked?'0':'1');
   location.href='/?'+extra+q;
 }
 function renameGlossary(){
@@ -526,32 +523,6 @@ def retire_progress(project, numbers):
 LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
 
 
-DAILY_BUDGET = int(os.environ.get("WN_DAILY_BUDGET", "1500"))
-PRIMARY_MODEL = "gemma-4-31b-it"
-RETRY_FACTOR = 1.15
-
-
-def estimate_run_calls(input_path, numbers):
-    totals = chunk_totals_safe(input_path, project_for(input_path)) or {}
-    if numbers:
-        ids = [f"chapter_{number:03d}" for number in numbers]
-    else:
-        ids = list(totals)
-    chunks = sum(totals.get(chapter_id, 0) for chapter_id in ids)
-    return int((chunks + len(ids)) * RETRY_FACTOR)
-
-
-def quota_status(estimate):
-    used = usage_today().get(PRIMARY_MODEL, 0)
-    remaining = max(DAILY_BUDGET - used, 0)
-    return estimate, remaining, estimate > remaining
-
-
-def quota_line():
-    used = usage_today().get(PRIMARY_MODEL, 0)
-    return f"Kuota {PRIMARY_MODEL} hari ini: {used}/{DAILY_BUDGET} (perkiraan)"
-
-
 def eta_text(project, rows):
     stats = project / "stats" / "translation_stats.json"
     if not stats.exists():
@@ -617,104 +588,6 @@ def failed_block(rows, running, log_text, selected, choice, fmt):
             "<button type='submit'>Ulang chapter ini</button></form></div>"
         )
     return "<section><h3>Chapter gagal</h3>" + "".join(items) + "</section>"
-
-
-def compute_name_check(input_path, project, glossary_path):
-    from config.settings import load_config
-    from main import DocumentChapterSplitter, parse_document
-    from translation.chunker import build_chunks
-    from translation.glossary import load_glossary
-    from translation.name_check import check_names
-
-    pairs = load_glossary(glossary_path)
-    max_tokens = load_config(project_dir=project).max_chunk_tokens
-    document = parse_document(input_path)
-    chunks = []
-    for chapter in DocumentChapterSplitter().split(document):
-        if not chapter.paragraphs:
-            continue
-        progress = load_progress(project / "progress", chapter.chapter_id) or {}
-        stored = progress.get("chunks") if isinstance(progress.get("chunks"), dict) else {}
-        if not stored:
-            continue
-        for chunk in build_chunks(chapter.paragraphs, max_tokens=max_tokens):
-            entry = stored.get(chunk.chunk_id)
-            if not isinstance(entry, dict):
-                continue
-            target = entry.get("translation") or "\n".join(entry.get("paragraph_translations") or [])
-            source = "\n".join(chunk.paragraph_texts)
-            chunks.append((chapter.chapter_id, source, target))
-    issues = check_names(chunks, pairs)
-    project.mkdir(parents=True, exist_ok=True)
-    (project / "name_check.json").write_text(json.dumps(issues, ensure_ascii=False), encoding="utf-8")
-    return issues
-
-
-def name_check_block(project):
-    path = project / "name_check.json"
-    if not path.exists():
-        return ""
-    try:
-        issues = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError:
-        return ""
-    if not issues:
-        return "<section><h3>Cek nama</h3><p class='muted'>Tidak ada isu nama.</p></section>"
-    labels = {"tidak_konsisten": "seharusnya", "masih_inggris": "masih Inggris"}
-    rows = ""
-    for issue in issues[:20]:
-        arrow = f" → {html.escape(issue['expected'])}" if issue["kind"] == "tidak_konsisten" else ""
-        rows += (
-            f"<li>{html.escape(issue['chapter'])}: {labels.get(issue['kind'], issue['kind'])} "
-            f"'{html.escape(issue['term'])}'{arrow}</li>"
-        )
-    more = f"<p class='muted'>dan {len(issues) - 20} isu lainnya</p>" if len(issues) > 20 else ""
-    return f"<section><h3>Cek nama</h3><ul>{rows}</ul>{more}</section>"
-
-
-def compute_quality(input_path, project):
-    from config.settings import load_config
-    from main import DocumentChapterSplitter, parse_document
-    from translation.chunker import build_chunks
-    from translation.quality_report import check_quality
-
-    max_tokens = load_config(project_dir=project).max_chunk_tokens
-    document = parse_document(input_path)
-    chunks = []
-    for chapter in DocumentChapterSplitter().split(document):
-        if not chapter.paragraphs:
-            continue
-        progress = load_progress(project / "progress", chapter.chapter_id) or {}
-        stored = progress.get("chunks") if isinstance(progress.get("chunks"), dict) else {}
-        for chunk in build_chunks(chapter.paragraphs, max_tokens=max_tokens):
-            entry = stored.get(chunk.chunk_id)
-            if not isinstance(entry, dict) or not isinstance(entry.get("paragraph_translations"), list):
-                continue
-            chunks.append((chapter.chapter_id, list(chunk.paragraph_texts), list(entry["paragraph_translations"])))
-    issues = check_quality(chunks)
-    project.mkdir(parents=True, exist_ok=True)
-    (project / "quality_report.json").write_text(json.dumps(issues, ensure_ascii=False), encoding="utf-8")
-    return issues
-
-
-def quality_block(project):
-    path = project / "quality_report.json"
-    if not path.exists():
-        return ""
-    try:
-        issues = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError:
-        return ""
-    if not issues:
-        return "<section><h3>Kualitas</h3><p class='muted'>Tidak ada isu kualitas.</p></section>"
-    labels = {"inggris_lolos": "kalimat Inggris lolos", "dialog_hilang": "format dialog hilang"}
-    rows = "".join(
-        f"<li>{html.escape(issue['chapter'])}: {labels.get(issue['kind'], issue['kind'])}: "
-        f"<i>{html.escape(issue['sample'])}</i></li>"
-        for issue in issues[:25]
-    )
-    more = f"<p class='muted'>dan {len(issues) - 25} isu lainnya</p>" if len(issues) > 25 else ""
-    return f"<section><h3>Kualitas</h3><ul>{rows}</ul>{more}</section>"
 
 
 NON_STORY_TITLE = re.compile(
@@ -967,7 +840,12 @@ def job_running():
     return subprocess.run(["tmux", "has-session", "-t", JOB], capture_output=True).returncode == 0
 
 
-def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", skip_research=False):
+def safe_title(value):
+    cleaned = re.sub(r'[\\/:*?"<>|]+', " ", str(value))
+    return re.sub(r"\s+", " ", cleaned).strip() or "novel"
+
+
+def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name=""):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
     repaired = quote(f"temp/repaired/{input_path.stem}.epub")
@@ -984,7 +862,9 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
     else:
-        base = out_name or f"{input_path.stem}_ui_{stamp}"
+        title = safe_title(novel_title(input_path.stem) or input_path.stem)
+        marker = "by" if (input_path.suffix.lower() == ".docx" and fmt == "epub") else "in"
+        base = f"(ID {marker} Converïse) {out_name or title}_{stamp}"
         out = quote(f"temp/{base}.{fmt}")
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
@@ -993,7 +873,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
             f"-o {out} --project-dir {project} --export-chapters "
             f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
         )
-    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json")           + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json") + " " + ("WN_RESEARCH_ENABLED=0 " if skip_research else ""))
+    env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json") + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json"))
     exit_file = quote("temp/ui_job_exit")
     done_script = (
         "code=$(cat temp/ui_job_exit 2>/dev/null); "
@@ -1012,7 +892,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     )
 
 
-def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_research=False):
+def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
@@ -1037,7 +917,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", skip_r
     remember_source(input_path)
     JOB_MODE.write_text(mode, encoding="utf-8")
     notify("WN Translator", "Proses dimulai: " + mode)
-    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, skip_research)
+    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
@@ -1123,14 +1003,14 @@ def chapter_files(stem, number, exports):
     return found
 
 
-def state_location(selected, choice, fmt, mode, out_name, msg, research="1"):
+def state_location(selected, choice, fmt, mode, out_name, msg):
     return (
         f"/?input={url_quote(selected)}&g={url_quote(choice)}&f={fmt}&m={mode}"
-        f"&o={url_quote(out_name)}&rs={research}&msg={url_quote(msg)}"
+        f"&o={url_quote(out_name)}&msg={url_quote(msg)}"
     )
 
 
-def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name="", research="1"):
+def page(selected="", choice="", message="", fmt="epub", mode="translate", out_name=""):
     fmt = fmt if fmt in FORMATS else "epub"
     mode = mode if mode in MODES else "translate"
     extra = None
@@ -1265,8 +1145,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     disabled = " disabled" if running else ""
     cfg_open = "" if running else " open"
     lock_cls = " locked" if running else ""
-    rs_checked = "" if research == "0" else " checked"
-    rs_hidden = " style='display:none'" if mode == "scan" else ""
     if running:
         fab_btn = ("<button type='submit' form='mainform' formaction='/stop' id='stop-btn' class='stop' "
                    "onclick='return guard(this)'>Berhenti</button>")
@@ -1278,7 +1156,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<section id='status'><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='{msg_class}'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
-        f"<p class='muted'>{quota_line()}</p>"
         f"{eta_html}"
         '</section>'
     )
@@ -1288,6 +1165,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         + "</section>"
     )
     outsec_style = " style='display:none'" if mode == "scan" else ""
+    rf_hidden = "" if mode == "translate" else " style='display:none'"
     log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
 <details class="cfg{lock_cls}"{cfg_open}>
@@ -1320,17 +1198,14 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 </div>
 {editor}
-<div id="rsec"{rs_hidden}>
-<label class="switch"><input type="checkbox" name="research" value="1"{rs_checked}><span class="slider"></span><span>Riset entitas</span></label>
-<p class="muted">Aktif: nama dan istilah baru dicari di web lewat Tavily. Matikan untuk hemat kuota; glosarium yang sudah ada tetap dipakai.</p>
-</div>
+<div id='rfresh'{rf_hidden}>
 <label class='switch'><input type='checkbox' name='retry_fresh' value='1'><span class='slider'></span><span>Terjemahkan ulang chapter yang dipilih (abaikan progres lama)</span></label>
 <p class='muted'>Progres lama disimpan di folder retired, tidak dihapus.</p>
+</div>
 </details>
 {log_block}
 <section>
-<div class='rowbox head'><h3>Chapter</h3><span><button type='button' onclick='toggleAll(this)'>Pilih semua</button> <button type='submit' formaction='/namecheck' formnovalidate>Cek kualitas</button></span></div>
-<label class='switch'><input type='checkbox' name='force' value='1'><span class='slider'></span><span>Tetap jalan walau kuota perkiraan kurang</span></label>
+<div class='rowbox head'><h3>Chapter</h3><span><button type='button' onclick='toggleAll(this)'>Pilih semua</button></span></div>
 {notice}
 <table><tr><th></th><th>Judul</th><th>Status</th><th>Chunk</th><th>File</th></tr>{table}</table>
 </section>
@@ -1340,7 +1215,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         rows, running, log_text,
         f"input/{current.name}" if current else "", choice, fmt,
     )
-    namecheck_html = (name_check_block(project_for(current)) + quality_block(project_for(current))) if current else ""
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -1369,7 +1243,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {status_block}
 <div id='progress'>{progress_block}</div>
 {failed_html}
-{namecheck_html}
 {form_block}
 {files_block}
 {fabbar}
@@ -1409,7 +1282,6 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("f", ["epub"])[0],
                     query.get("m", ["translate"])[0],
                     query.get("o", [""])[0],
-                    query.get("rs", ["1"])[0],
                 ),
             )
         elif url.path == "/browse":
@@ -1427,6 +1299,8 @@ class Handler(BaseHTTPRequestHandler):
                     MIME.get(target.suffix.lower()[1:], "application/octet-stream"),
                     {"Content-Disposition": disposition(download_name(unquote(url.path[len("/file/"):]), target))},
                 )
+                if "_chapters/" not in unquote(url.path[len("/file/"):]):
+                    target.unlink(missing_ok=True)
         else:
             self._send(404, "tidak ditemukan")
 
@@ -1443,7 +1317,6 @@ class Handler(BaseHTTPRequestHandler):
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
         out_name = form.get("out_name", [""])[0]
-        research_flag = "1" if (form.get("research", [""])[0] == "1" or mode == "scan") else "0"
 
         if self.path == "/glossary/rename":
             try:
@@ -1451,7 +1324,7 @@ class Handler(BaseHTTPRequestHandler):
                 msg = f"Glosarium diganti namanya menjadi {choice}."
             except (ValueError, RuntimeError) as exc:
                 msg = f"Gagal: {exc}"
-            self._redirect(state_location(selected, choice, fmt, mode, out_name, msg, research_flag))
+            self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
             return
 
         try:
@@ -1460,17 +1333,9 @@ class Handler(BaseHTTPRequestHandler):
                 glossary_name = resolve_glossary(choice, form.get("glossary_new", [""])[0])
                 rows = read_chapters(project_for(input_path)) or preview_chapters_safe(input_path, project_for(input_path))
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
-                skip = research_flag == "0"
-                if mode == "translate" and numbers is not False:
-                    estimate, remaining, short = quota_status(estimate_run_calls(input_path, numbers))
-                    if short and form.get("force", [""])[0] != "1":
-                        raise RuntimeError(
-                            f"Perkiraan {estimate} panggilan, sisa kuota hari ini sekitar {remaining}. "
-                            "Centang 'Tetap jalan' lalu Mulai untuk lanjut."
-                        )
                 if form.get("retry_fresh", [""])[0] == "1" and mode == "translate" and numbers:
                     retire_progress(project_for(input_path), numbers)
-                start_job(input_path, numbers, fmt, glossary_name, mode, out_name, skip_research=skip)
+                start_job(input_path, numbers, fmt, glossary_name, mode, out_name)
                 choice = glossary_name
                 msg = "Proses dimulai."
             elif self.path == "/retry":
@@ -1478,15 +1343,9 @@ class Handler(BaseHTTPRequestHandler):
                 glossary_name = resolve_glossary(choice, "")
                 chapter_number = int(form.get("ch", [""])[0].split("_")[1])
                 retire_progress(project_for(input_path), {chapter_number})
-                start_job(input_path, {chapter_number}, fmt, glossary_name, "translate", out_name, skip_research=False)
+                start_job(input_path, {chapter_number}, fmt, glossary_name, "translate", out_name)
                 choice = glossary_name
                 msg = f"Mengulang chapter {chapter_number}."
-            elif self.path == "/namecheck":
-                input_path = safe_input(selected)
-                glossary_name = resolve_glossary(choice, "")
-                issues = compute_name_check(input_path, project_for(input_path), ROOT / "glossary" / glossary_name)
-                quality = compute_quality(input_path, project_for(input_path))
-                msg = f"Cek selesai: {len(issues)} isu nama, {len(quality)} isu kualitas."
             elif self.path == "/stop":
                 stop_job()
                 msg = "Proses dihentikan."
@@ -1495,7 +1354,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
         except (ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as exc:
             msg = f"Gagal: {exc}"
-        self._redirect(state_location(selected, choice, fmt, mode, out_name, msg, research_flag))
+        self._redirect(state_location(selected, choice, fmt, mode, out_name, msg))
 
 
 if __name__ == "__main__":

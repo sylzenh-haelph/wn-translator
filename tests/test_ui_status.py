@@ -90,23 +90,8 @@ def test_clean_output_name():
             clean_output_name(bad)
 
 
-def test_build_command_for_scan_translate_and_export():
-    scan = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "scan", "20260101_0000")
-    assert "--scan-glossary" in scan
-    assert " -o " not in scan
-    tl = build_command(Path("input/novel.docx"), {1}, "docx", "novel.txt", "translate", "20260101_0000")
-    assert "temp/novel_ui_20260101_0000.docx" in tl
-    assert "--chapter 1" in tl
-    assert "--glossary" in tl
-    assert "--export-only" not in tl
-    ex = build_command(Path("input/novel.epub"), {2, 3}, "epub", "novel.txt", "export", "20260101_0000")
-    assert "--export-only" in ex
-    assert "--chapter 2,3" in ex
 
 
-def test_build_command_uses_custom_output_name():
-    cmd = build_command(Path("input/novel.epub"), None, "docx", "novel.txt", "translate", "20260101_0000", "Bab 3")
-    assert "temp/Bab 3.docx" in cmd
 
 
 def test_chapter_files_lists_each_format():
@@ -195,9 +180,6 @@ def test_build_command_stops_without_sleep():
     assert "SELESAI" in cmd
 
 
-def test_build_command_can_skip_research():
-    cmd = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "translate", "20260101_0000", "", True)
-    assert "WN_RESEARCH_ENABLED=0 python" in cmd
 
 
 def test_build_command_sets_title_cache():
@@ -206,11 +188,6 @@ def test_build_command_sets_title_cache():
     assert "WN_USAGE_FILE=temp/usage_counts.json" in cmd
 
 
-def test_state_location_keeps_research_flag():
-    from ui.server import state_location
-
-    loc = state_location("input/a.epub", "g", "epub", "translate", "", "ok", "0")
-    assert "&rs=0" in loc
 
 
 def test_read_chapters_falls_back_to_backup(tmp_path):
@@ -266,3 +243,34 @@ def test_page_renders_smoke():
 
     markup = page()
     assert markup.startswith("<!doctype html>")
+
+
+def test_build_command_for_scan_translate_and_export():
+    scan = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "scan", "20260101_0000")
+    assert "--scan-glossary" in scan
+    assert " -o " not in scan
+    tl = build_command(Path("input/novel.docx"), {1}, "docx", "novel.txt", "translate", "20260101_0000")
+    assert "(ID in Converïse) novel_20260101_0000.docx" in tl
+    assert "--chapter 1" in tl
+    assert "--glossary" in tl
+    assert "--export-only" not in tl
+    ex = build_command(Path("input/novel.epub"), {2, 3}, "epub", "novel.txt", "export", "20260101_0000")
+    assert "--export-only" in ex
+    assert "--chapter 2,3" in ex
+
+
+def test_build_command_uses_custom_output_name():
+    cmd = build_command(Path("input/novel.epub"), None, "docx", "novel.txt", "translate", "20260101_0000", "Bab 3")
+    assert "(ID in Converïse) Bab 3_20260101_0000.docx" in cmd
+
+
+def test_docx_to_epub_uses_by_marker():
+    cmd = build_command(Path("input/novel.docx"), None, "epub", "novel.txt", "translate", "20260101_0000")
+    assert "(ID by Converïse) novel_20260101_0000.epub" in cmd
+
+
+def test_state_location_keeps_mode():
+    from ui.server import state_location
+
+    loc = state_location("input/a.epub", "g", "epub", "translate", "", "ok")
+    assert "&m=translate" in loc

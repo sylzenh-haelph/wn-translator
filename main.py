@@ -1680,44 +1680,6 @@ def main():
         # RESEARCH SERVICE
         # --------------------------------------------------
 
-        entity_service = None
-
-        if config.research_enabled:
-            print()
-            print(
-                "Initializing entity research..."
-            )
-
-            logger.info(
-                "Entity research initialization started"
-            )
-
-            # Research memakai client dengan cadangan (research_fallbacks).
-            research_client = build_failover_client(
-                config,
-                role="Research",
-                primary_provider=config.research_provider,
-                primary_model=config.research_model,
-                fallbacks=config.research_fallbacks,
-                max_retries=config.research_max_retries,
-                timeout=config.research_timeout,
-                on_failover=make_failover_logger(logger, "Research"),
-            )
-
-            entity_service = build_research_service(
-                project_dir=project_dir,
-                client=research_client,
-                document_title=document.title,
-                author=document.author,
-                research_timeout=config.research_timeout,
-                research_max_retries=config.research_max_retries,
-                max_attempts=config.research_max_attempts,
-            )
-
-            logger.info(
-                "Entity research initialization completed"
-            )
-
         chapter_output_dir = None
 
         if args.export_chapters:
