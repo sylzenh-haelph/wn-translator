@@ -136,7 +136,7 @@ def save_glossary(form):
         lines += ["", "## tambahan", f"{left} = {right}"]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return f"/glossary?file={url_quote(value)}&msg={url_quote('Tersimpan.')}"
+    return "/"
 
 
 def _card(entry, new_names, seen):
