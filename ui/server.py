@@ -523,25 +523,6 @@ def retire_progress(project, numbers):
 LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
 
 
-def eta_text(project, rows):
-    stats = project / "stats" / "translation_stats.json"
-    if not stats.exists():
-        return ""
-    try:
-        data = json.loads(stats.read_text(encoding="utf-8"))
-    except ValueError:
-        return ""
-    total_chunks = int(data.get("total_chunks") or 0)
-    done_chunks = int(data.get("completed_chunks") or 0)
-    duration = float(data.get("duration_seconds") or 0)
-    if not total_chunks or not duration or not done_chunks:
-        return ""
-    per_chunk = duration / done_chunks
-    remaining = max(total_chunks - done_chunks, 0)
-    minutes = int(per_chunk * remaining / 60)
-    return f"perkiraan sisa sekitar {minutes} menit ({per_chunk:.0f} detik per chunk)"
-
-
 def notify(title, message):
     try:
         subprocess.run(
@@ -1136,9 +1117,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         progress_block = ""
 
     state = "berjalan" if running else "berhenti"
-    eta = eta_text(project_for(current), rows) if (running and current) else ""
     msg_class = "msg-warn" if message.startswith(("Gagal", "Peringatan")) else "muted"
-    eta_html = f"<p class='muted'>{html.escape(eta)}</p>" if eta else ""
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
     refresh = ""
@@ -1156,7 +1135,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         f"<section id='status'><p>{dot}Status proses: <span class='{state_class}'>{state}</span></p>"
         f"<p class='{msg_class}'>{html.escape(message)}</p>"
         f"<p class='muted'>{usage_line()}</p>"
-        f"{eta_html}"
         '</section>'
     )
     files_block = (
