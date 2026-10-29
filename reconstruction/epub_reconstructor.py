@@ -193,7 +193,7 @@ def _build_content_opf(document, structure, build_id="", label=""):
             metadata,
             "dc:title",
         )
-        title.text = document.title
+        title.text = f"({label}) {document.title}" if label else document.title
 
         creator = ET.SubElement(
             metadata,
