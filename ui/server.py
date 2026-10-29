@@ -943,7 +943,7 @@ def render_log(lines=400):
         else:
             current["body"].append(line)
     sessions.append(current)
-    sessions = [s for s in sessions if s["body"] or s["title"] != "Log sebelumnya"]
+    sessions = [s for s in sessions if any(line.strip() for line in s["body"]) or s["title"] != "Log sebelumnya"]
     markup = []
     for index, session in enumerate(sessions):
         opened = " open" if index == len(sessions) - 1 else ""
