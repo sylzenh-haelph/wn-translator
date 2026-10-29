@@ -245,8 +245,11 @@ class GeminiClient:
                 texts.append(text)
 
         if not texts:
+            reason = candidates[0].get("finishReason", "tidak diketahui")
+            block = (data.get("promptFeedback") or {}).get("blockReason", "-")
             raise RuntimeError(
-                "Tidak menemukan output text dari model."
+                "Tidak menemukan output text dari model. "
+                f"finishReason={reason}, blockReason={block}"
             )
 
         return texts[-1]
