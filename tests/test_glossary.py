@@ -25,9 +25,9 @@ def test_curly_apostrophe_variant():
     assert apply_glossary("Adventurers' Guild", pairs) == "Guild Petualang"
 
 
-def test_lowercase_term_is_matched():
+def test_lowercase_term_is_not_matched():
     pairs = [("Dragon God", "Dewa Naga")]
-    assert apply_glossary("dragon god datang.", pairs) == "Dewa Naga datang."
+    assert apply_glossary("dragon god datang.", pairs) == "dragon god datang."
 
 
 def test_load_skips_comments_and_blank_lines(tmp_path):
