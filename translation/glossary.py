@@ -79,17 +79,36 @@ def _contains(longer, shorter):
     return m < n and any(longer[i:i + m] == shorter for i in range(n - m + 1))
 
 
+HONORIFIC_SUFFIXES = {"kun", "chan", "san", "sama", "dono", "sensei", "senpai", "sempai", "tan"}
+HONORIFIC_TITLES = {"mr", "mrs", "ms", "miss", "dr", "lord", "lady", "sir", "master", "madam", "madame"}
+
+
+def _core_words(name):
+    # Nama inti tanpa sapaan dan gelar: 'Subaru-kun' dan 'Mr. Subaru' menjadi ('subaru',).
+    words = list(_words(name))
+    while len(words) > 1 and words[-1] in HONORIFIC_SUFFIXES:
+        words.pop()
+    while len(words) > 1 and words[0] in HONORIFIC_TITLES:
+        words.pop(0)
+    return tuple(words)
+
+
 def prune_scan_names(entries, existing_names):
-    # shortcut: pembandingan per kata; ejaan beda tanpa kata yang sama (mis. 'Manggod' vs 'Man-God') belum digabung
-    items, seen = [], set()
+    # Variasi yang hanya beda sapaan atau gelar dianggap satu entitas; bentuk paling polos yang dipakai.
+    # Pembandingan per kata: ejaan beda tanpa kata yang sama belum digabung.
+    best = {}
     for name, kind in entries:
         clean = name.strip()
-        key = _words(clean)
-        if clean and key and key not in seen:
-            seen.add(key)
-            items.append((clean, kind, key))
+        key = _core_words(clean)
+        if not clean or not key:
+            continue
+        total = len(_words(clean))
+        rank = (total - len(key), total, len(clean))
+        if key not in best or rank < best[key][0]:
+            best[key] = (rank, clean, kind)
+    items = [(clean, kind, key) for key, (_, clean, kind) in best.items()]
 
-    existing = [_words(name) for name in existing_names]
+    existing = [_core_words(name) for name in existing_names]
     keep = []
     for clean, kind, key in items:
         if key in existing:

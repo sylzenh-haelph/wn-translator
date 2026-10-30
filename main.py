@@ -26,7 +26,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary, translate_terms
+from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary, prune_scan_names, translate_terms
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -1335,7 +1335,7 @@ def scan_glossary_file(input_path: Path, project_dir: Path, output: Path):
         found.extend((entity.text, entity.entity_type) for entity in result.entities)
     write_scan_progress(project_dir, total=len(chapters), done=len(chapters), current="", finished=True)
 
-    translations = translate_terms(research_client, [name for name, _ in found])
+    translations = translate_terms(research_client, [name for name, _ in prune_scan_names(found, [])])
     added = merge_scan_glossary(found, output, document.title, translations)
     print(f"Glosarium: {output} | entri baru: {added}")
 
