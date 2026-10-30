@@ -566,7 +566,7 @@ def failed_block(rows, running, log_text, selected, choice, fmt):
             f"<input type='hidden' name='ch' value='{html.escape(r['id'])}'>"
             "<button type='submit'>Ulang chapter ini</button></form></div>"
         )
-    return "<section><h3>Chapter gagal</h3>" + "".join(items) + "</section>"
+    return "<section><h3>Perlu diulang</h3>" + "".join(items) + "</section>"
 
 
 NON_STORY_TITLE = re.compile(
@@ -681,8 +681,8 @@ def browse_page(path_text=""):
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        f"<title>Cari novel</title><style>{STYLE}{EXTRA_STYLE}</style></head><body>"
-        "<h1>Cari novel</h1>"
+        f"<title>Jelajah</title><style>{STYLE}{EXTRA_STYLE}</style></head><body>"
+        "<h1>Jelajah</h1>"
         f"<section><h3>{html.escape(str(current))}</h3>{up}"
         f"<ul>{dir_html}</ul><h3>Novel di folder ini</h3><ul>{file_html}</ul>"
         "<p><a href='/'>← Kembali ke halaman utama</a></p></section></body></html>"
@@ -1133,7 +1133,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         '</section>'
     )
     files_block = (
-        "<section><h3>File hasil</h3>"
+        "<section><h3>Pustaka</h3>"
         + (f"<ul>{listing}</ul>" if listing else "<p class='muted'>Belum ada file hasil.</p>")
         + "</section>"
     )
@@ -1142,10 +1142,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     log_block = f'<details id="log"><summary>Log terbaru</summary>{render_log()}</details>'
     form_block = f"""<form method="post" action="/start" id="mainform">
 <details class="cfg{lock_cls}"{cfg_open}>
-<summary>Mulai proses</summary>
+<summary>Dapur</summary>
 <label>Novel</label>
 <select name="input" onchange="go('input='+encodeURIComponent(this.value))">{novel_options}</select>
-<p><a href='/browse?path=/storage/emulated/0/Download'>Cari novel di HP</a></p>
+<p><a href='/browse?path=/storage/emulated/0/Download'>Jelajah novel di HP</a></p>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label>
 <div class="seg duo">{mode_inputs}<span class="thumb"></span></div>
