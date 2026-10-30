@@ -76,8 +76,6 @@ def test_paths_from_browser_are_checked():
     with pytest.raises(ValueError):
         start_job(Path("input/a.epub"), None, "pdf", "a.txt", "translate")
     with pytest.raises(ValueError):
-        start_job(Path("input/a.epub"), None, "epub", "a.txt", "export")
-    with pytest.raises(ValueError):
         start_job(Path("input/a.epub"), None, "epub", "a.txt", "translate", "../x")
 
 
@@ -245,7 +243,7 @@ def test_page_renders_smoke():
     assert markup.startswith("<!doctype html>")
 
 
-def test_build_command_for_scan_translate_and_export():
+def test_build_command_for_scan_and_translate():
     scan = build_command(Path("input/novel.epub"), None, "epub", "novel.txt", "scan", "20260101_0000")
     assert "--scan-glossary" in scan
     assert " -o " not in scan
@@ -253,10 +251,6 @@ def test_build_command_for_scan_translate_and_export():
     assert "(ID in Converïse) novel_20260101_0000.docx" in tl
     assert "--chapter 1" in tl
     assert "--glossary" in tl
-    assert "--export-only" not in tl
-    ex = build_command(Path("input/novel.epub"), {2, 3}, "epub", "novel.txt", "export", "20260101_0000")
-    assert "--export-only" in ex
-    assert "--chapter 2,3" in ex
 
 
 def test_build_command_uses_custom_output_name():

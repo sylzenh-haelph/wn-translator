@@ -27,11 +27,10 @@ JOB_MODE = ROOT / "temp" / "ui_job_mode.txt"
 STATUS_TEXT = {"not_started": "belum mulai", "in_progress": "belum selesai", "completed": "selesai"}
 INPUT_SUFFIXES = {".epub", ".docx"}
 FORMATS = ("epub", "docx")
-MODES = ("translate", "export", "scan")
-MODE_LABELS = (("translate", "Terjemahkan"), ("export", "Ekspor"), ("scan", "Scan"))
+MODES = ("translate", "scan")
+MODE_LABELS = (("translate", "Terjemahkan"), ("scan", "Scan"))
 HINTS = {
     "translate": "Menerjemahkan chapter yang dicentang, lalu membuat hasil penuh dalam format yang dipilih.",
-    "export": "Mengekspor chapter yang sudah selesai dan dicentang ke format yang dipilih, tanpa menerjemahkan ulang.",
     "scan": "Hanya mencari nama dan istilah untuk glosarium. Tidak membuat EPUB atau DOCX.",
 }
 MIME = {
@@ -55,8 +54,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .seg .thumb{position:absolute;z-index:0;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:999px;background:var(--accent);transition:transform .35s cubic-bezier(.4,0,.2,1)}
 .seg.duo .thumb{width:calc((100% - 8px)/2)}
 #m-translate:checked ~ .thumb{transform:translateX(0)}
-#m-export:checked ~ .thumb{transform:translateX(100%)}
-#m-scan:checked ~ .thumb{transform:translateX(200%)}
+#m-scan:checked ~ .thumb{transform:translateX(100%)}
 #f-epub:checked ~ .thumb{transform:translateX(0)}
 #f-docx:checked ~ .thumb{transform:translateX(100%)}
 .bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
@@ -849,10 +847,9 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
         out = quote(f"temp/{base}.{fmt}")
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
-        export_only = " --export-only" if mode == "export" else ""
         args = (
             f"-o {out} --project-dir {project} --export-chapters "
-            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{export_only}"
+            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}"
         )
     env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json") + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json") + " ")
     exit_file = quote("temp/ui_job_exit")
@@ -879,8 +876,6 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
         raise ValueError("format output harus epub atau docx")
     if mode not in MODES:
         raise ValueError("mode tidak dikenal")
-    if mode == "export" and not numbers:
-        raise ValueError("pilih chapter yang mau diekspor")
     if mode == "translate" and numbers is not None and (not numbers or min(numbers) < 1):
         raise ValueError("pilih minimal satu chapter")
     name = clean_output_name(out_name)
@@ -1153,7 +1148,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <p><a href='/browse?path=/storage/emulated/0/Download'>Cari novel di HP</a></p>
 <p class="muted">Arah terjemahan: hanya Inggris ke Indonesia. Novel bahasa lain belum didukung.</p>
 <label>Mode</label>
-<div class="seg tri">{mode_inputs}<span class="thumb"></span></div>
+<div class="seg duo">{mode_inputs}<span class="thumb"></span></div>
 <p class="muted" id="modehint">{html.escape(HINTS[mode])}</p>
 <div id="outsec"{outsec_style}>
 <label>Format output</label>

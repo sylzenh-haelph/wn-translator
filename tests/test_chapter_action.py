@@ -25,9 +25,3 @@ def test_chapter_action():
     assert chapter_action(False, FakeProcessor("completed"), "c") == "restore"
     assert chapter_action(False, FakeProcessor("in_progress"), "c") == "skip"
     assert chapter_action(False, FakeProcessor("not_started"), "c") == "skip"
-
-
-def test_export_only_restores_only_completed_selected():
-    assert chapter_action(True, FakeProcessor("completed"), "c", export_only=True) == "restore"
-    assert chapter_action(True, FakeProcessor("in_progress"), "c", export_only=True) == "skip"
-    assert chapter_action(False, FakeProcessor("completed"), "c", export_only=True) == "skip"
