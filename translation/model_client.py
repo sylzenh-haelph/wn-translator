@@ -95,7 +95,6 @@ class GeminiClient:
 
         for attempt in range(self.max_retries + 1):
             try:
-                _count_request(self.model)
                 response = requests.post(
                     self.url,
                     headers=headers,
@@ -126,7 +125,9 @@ class GeminiClient:
                         "API mengembalikan response yang bukan JSON."
                     ) from exc
 
-                return self._extract_text(data)
+                text = self._extract_text(data)
+                _count_request(self.model)
+                return text
 
             except (requests.Timeout, requests.ConnectionError) as exc:
                 last_error = RuntimeError(
