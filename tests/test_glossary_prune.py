@@ -13,3 +13,12 @@ def test_existing_name_blocks_honorific_variant():
 def test_longer_name_replaces_shorter_part():
     kept = prune_scan_names([("Natsuki Subaru", "orang"), ("Subaru", "orang")], [])
     assert [name for name, _ in kept] == ["Natsuki Subaru"]
+
+
+def test_title_is_dropped_from_name():
+    kept = prune_scan_names([("Lady Roxy", "orang"), ("Sir Cliff", "orang")], [])
+    assert [name for name, _ in kept] == ["Roxy", "Cliff"]
+
+
+def test_name_known_through_disabled_title_entry_is_not_added():
+    assert prune_scan_names([("Lady Roxy", "orang")], ["Lady Roxy"]) == []

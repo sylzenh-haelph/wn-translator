@@ -92,6 +92,22 @@ def _core_words(name):
     return tuple(words)
 
 
+TITLE_PREFIX = re.compile(r"^(?:mr|mrs|ms|miss|dr|lord|lady|sir|master|madam|madame)\.?\s+", re.IGNORECASE)
+HONORIFIC_TAIL = re.compile(r"(?:-|\s)(?:kun|chan|san|sama|dono|sensei|senpai|sempai|tan)$", re.IGNORECASE)
+
+
+def _display_name(name):
+    # Bentuk yang ditulis ke glosarium: tanpa gelar di depan dan sapaan di belakang.
+    # 'Lady Roxy' -> 'Roxy', 'Subaru-kun' -> 'Subaru'. Gelar sudah diterjemahkan lewat entri sendiri.
+    out = name.strip()
+    while True:
+        new = HONORIFIC_TAIL.sub("", TITLE_PREFIX.sub("", out, count=1), count=1).strip()
+        if not new or new == out:
+            break
+        out = new
+    return out or name.strip()
+
+
 def prune_scan_names(entries, existing_names):
     # Variasi yang hanya beda sapaan atau gelar dianggap satu entitas; bentuk paling polos yang dipakai.
     # Pembandingan per kata: ejaan beda tanpa kata yang sama belum digabung.
@@ -104,7 +120,7 @@ def prune_scan_names(entries, existing_names):
         total = len(_words(clean))
         rank = (total - len(key), total, len(clean))
         if key not in best or rank < best[key][0]:
-            best[key] = (rank, clean, kind)
+            best[key] = (rank, _display_name(clean), kind)
     items = [(clean, kind, key) for key, (_, clean, kind) in best.items()]
 
     existing = [_core_words(name) for name in existing_names]
