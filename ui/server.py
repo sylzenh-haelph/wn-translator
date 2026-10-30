@@ -28,7 +28,7 @@ STATUS_TEXT = {"not_started": "belum mulai", "in_progress": "belum selesai", "co
 INPUT_SUFFIXES = {".epub", ".docx"}
 FORMATS = ("epub", "docx")
 MODES = ("translate", "scan")
-MODE_LABELS = (("translate", "Terjemahkan"), ("scan", "Scan"))
+MODE_LABELS = (("translate", "Forge"), ("scan", "Radar"))
 HINTS = {
     "translate": "Menerjemahkan chapter yang dicentang, lalu membuat hasil penuh dalam format yang dipilih.",
     "scan": "Hanya mencari nama dan istilah untuk glosarium. Tidak membuat EPUB atau DOCX.",
