@@ -337,7 +337,9 @@ def _build_chapter_document(
     if epub:
         from copy import deepcopy
 
-        structure = deepcopy(epub)
+        # XHTML sumber tidak disalin penuh untuk setiap chapter; hanya yang dipilih di bawah yang dipakai.
+        structure = deepcopy({k: v for k, v in epub.items() if k != "xhtml_sources"})
+        structure["xhtml_sources"] = epub.get("xhtml_sources", {})
 
         paragraph_ids = {
             paragraph.id
