@@ -48,7 +48,8 @@ def build_adaptive_query(
         + author
 
     attempt 3+:
-        + chapter context
+        sama dengan attempt 2. Teks paragraf sumber tidak dimasukkan ke query,
+        karena membuat hasil Tavily menyimpang.
     """
 
     query = build_initial_query(
@@ -62,15 +63,5 @@ def build_adaptive_query(
     if attempt >= 2 and author:
         query += f' "{author}"'
 
-    if attempt >= 3 and chapter_context:
-        # Batasi context agar query tidak menjadi terlalu panjang.
-        context = " ".join(
-            chapter_context.split()
-        )
-
-        if len(context) > 300:
-            context = context[:300]
-
-        query += f' "{context}"'
 
     return query

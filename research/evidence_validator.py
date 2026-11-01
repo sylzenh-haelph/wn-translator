@@ -10,6 +10,11 @@ class EvidenceValidation:
     reason: str
 
 
+def _has_word(term, text):
+    # Cocok sebagai kata utuh: 'Rudy' tidak cocok dengan 'Rudyard'.
+    return re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text) is not None
+
+
 class EvidenceValidator:
     """
     Deterministic validator for research evidence.
@@ -59,7 +64,7 @@ class EvidenceValidator:
         reasons = []
 
         # Exact entity mention is the strongest deterministic signal.
-        if entity in combined:
+        if _has_word(entity, combined):
             score += 0.7
             reasons.append("Entity appears in title or snippet.")
         else:
@@ -70,7 +75,7 @@ class EvidenceValidator:
                 if len(word) > 2
             ]
 
-            if words and all(word in combined for word in words):
+            if words and all(_has_word(word, combined) for word in words):
                 score += 0.5
                 reasons.append("All meaningful entity words appear in evidence.")
 
