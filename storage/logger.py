@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
@@ -23,8 +24,10 @@ class ProjectLogger:
         if not self.logger.handlers:
             log_path = self.log_dir / "translator.log"
 
-            handler = logging.FileHandler(
+            handler = RotatingFileHandler(
                 log_path,
+                maxBytes=2_000_000,
+                backupCount=3,
                 encoding="utf-8",
             )
 
