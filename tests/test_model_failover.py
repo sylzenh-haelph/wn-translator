@@ -87,7 +87,7 @@ def test_gemini_402_is_typed(monkeypatch):
         def json(self):
             return {"error": {"message": "Payment Required"}}
 
-    monkeypatch.setattr(mc.requests, "post", lambda *a, **k: FakeResponse())
+    monkeypatch.setattr(mc.requests.Session, "post", lambda *a, **k: FakeResponse())
 
     client = GeminiClient("gemma-4-31b-it", api_key="test")
 

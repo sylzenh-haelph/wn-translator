@@ -61,6 +61,7 @@ class GeminiClient:
         self.max_retries = max_retries
         self.timeout = timeout
         self.backoff_base = backoff_base
+        self.session = requests.Session()
 
         self.url = (
             f"https://generativelanguage.googleapis.com/"
@@ -95,7 +96,7 @@ class GeminiClient:
 
         for attempt in range(self.max_retries + 1):
             try:
-                response = requests.post(
+                response = self.session.post(
                     self.url,
                     headers=headers,
                     json=payload,

@@ -44,7 +44,7 @@ def test_gemini_generate():
     })
 
     with patch(
-        "translation.model_client.requests.post",
+        "translation.model_client.requests.Session.post",
         return_value=response,
     ) as post:
         client = GeminiClient("gemma-4-31b-it", "secret")
@@ -67,7 +67,7 @@ def test_gemini_retry():
     ]
 
     with patch(
-        "translation.model_client.requests.post",
+        "translation.model_client.requests.Session.post",
         side_effect=responses,
     ) as post, patch(
         "translation.model_client.time.sleep"

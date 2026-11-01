@@ -24,7 +24,7 @@ def test_daily_quota_is_not_retried(monkeypatch):
         calls.append(1)
         return Resp(429, {"error": {"message": "Quota exceeded for GenerateRequestsPerDayPerProjectPerModel"}})
 
-    monkeypatch.setattr(model_client.requests, "post", fake_post)
+    monkeypatch.setattr(model_client.requests.Session, "post", fake_post)
     monkeypatch.setattr(model_client.time, "sleep", no_sleep)
     client = GeminiClient(api_key="x", max_retries=3)
     with pytest.raises(ModelProviderError):
@@ -41,7 +41,7 @@ def test_per_minute_limit_still_retries(monkeypatch):
             return Resp(429, {"error": {"message": "Quota exceeded per minute"}})
         return Resp(200, {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]})
 
-    monkeypatch.setattr(model_client.requests, "post", fake_post)
+    monkeypatch.setattr(model_client.requests.Session, "post", fake_post)
     monkeypatch.setattr(model_client.time, "sleep", lambda seconds: None)
     client = GeminiClient(api_key="x", max_retries=3)
     assert client.generate("halo") == "{}"
