@@ -4,8 +4,6 @@ from research.ai_entity_adapter import ai_entities_to_candidates
 from research.entity_db import EntityDB
 from research.entity_resolver import ResolvedEntity
 from research.adaptive_research import AdaptiveResearchEngine
-from research.research_translation import ResearchTranslationInterpreter
-from research.entity_resolution_service import EntityResolutionService
 from research.evidence_validator import EvidenceValidator
 
 
@@ -24,8 +22,8 @@ class EntityResearchPipeline:
         db: EntityDB,
         client,
         research_engine: AdaptiveResearchEngine,
-        interpreter: ResearchTranslationInterpreter | None = None,
-        resolution_service: EntityResolutionService | None = None,
+        interpreter=None,
+        resolution_service=None,
         evidence_validator: EvidenceValidator | None = None,
     ):
         self.db = db
