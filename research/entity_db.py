@@ -37,6 +37,7 @@ class EntityDB:
     def __init__(self, path="project/entity_db.json"):
         self.path = Path(path)
         self.data = self._load()
+        self._index = self._build_index()
 
     def _load(self):
         if not self.path.exists():
@@ -146,33 +147,20 @@ class EntityDB:
             f"Entity type tidak didukung: {entity_type}"
         )
 
+    def _build_index(self):
+        index = {}
+        for category in ("characters", "proper_nouns"):
+            for key, record in self.data[category].items():
+                for name in [record.get("canonical_name", "")] + list(record.get("aliases", [])):
+                    index.setdefault(_normalize(name), (category, key))
+        return index
+
     def get(self, text):
-        normalized = _normalize(text)
-
-        for category in (
-            "characters",
-            "proper_nouns",
-        ):
-            for record in self.data[category].values():
-
-                canonical = _normalize(
-                    record.get(
-                        "canonical_name",
-                        "",
-                    )
-                )
-
-                if normalized == canonical:
-                    return dict(record)
-
-                for alias in record.get(
-                    "aliases",
-                    [],
-                ):
-                    if normalized == _normalize(alias):
-                        return dict(record)
-
-        return None
+        hit = self._index.get(_normalize(text))
+        if hit is None:
+            return None
+        category, key = hit
+        return dict(self.data[category][key])
 
     def add(
         self,
@@ -223,6 +211,8 @@ class EntityDB:
         }
 
         self.data[category][key] = record
+        for name in [record["canonical_name"]] + list(record["aliases"]):
+            self._index.setdefault(_normalize(name), (category, key))
         self.save()
 
         return dict(record)
@@ -265,6 +255,7 @@ class EntityDB:
             if field in allowed_fields:
                 record[field] = value
 
+        self._index = self._build_index()
         self.save()
 
         return dict(record)

@@ -187,7 +187,6 @@ class ProgressDB:
                     safe_data,
                     file,
                     ensure_ascii=False,
-                    indent=2,
                 )
                 file.flush()
                 os.fsync(file.fileno())
