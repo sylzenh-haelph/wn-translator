@@ -689,62 +689,6 @@ def parse_chapter_list(value: str) -> set[int]:
     return numbers
 
 
-def parse_chapter_selection(value: str) -> tuple[int, int]:
-    """Parse --chapter N or --chapter START-END into a 1-based range."""
-    raw = value.strip()
-
-    if not raw:
-        raise ValueError("--chapter tidak boleh kosong.")
-
-    if "-" in raw:
-        parts = raw.split("-")
-
-        if len(parts) != 2:
-            raise ValueError(
-                "Format --chapter harus N atau START-END."
-            )
-
-        start_raw, end_raw = (
-            part.strip()
-            for part in parts
-        )
-
-        if not start_raw.isdigit() or not end_raw.isdigit():
-            raise ValueError(
-                "Nomor chapter harus berupa bilangan bulat positif."
-            )
-
-        start = int(start_raw)
-        end = int(end_raw)
-
-        if start <= 0 or end <= 0:
-            raise ValueError(
-                "Nomor chapter harus lebih besar dari 0."
-            )
-
-        if start > end:
-            raise ValueError(
-                "Range chapter tidak valid: awal tidak boleh "
-                "lebih besar dari akhir."
-            )
-
-        return start, end
-
-    if not raw.isdigit():
-        raise ValueError(
-            "Format --chapter harus N atau START-END."
-        )
-
-    number = int(raw)
-
-    if number <= 0:
-        raise ValueError(
-            "Nomor chapter harus lebih besar dari 0."
-        )
-
-    return number, number
-
-
 def chapter_action(selected: bool, processor, chapter_id: str) -> str:
     """Chapter yang sudah selesai dipulihkan tanpa riset ulang."""
     status = processor.progress_db.load(chapter_id)["status"]
@@ -939,62 +883,7 @@ def process_chapters(
                 f"{len(chapter.paragraphs)}"
             )
 
-        # --------------------------------------------------
-        # ENTITY RESEARCH
-        # --------------------------------------------------
-
         resolved_entities = []
-
-        if entity_service is not None and not restore_only:
-            print("  Research  : analyzing entities...")
-
-            if logger:
-                logger.info(
-                    f"Entity research started: "
-                    f"{chapter.chapter_id}"
-                )
-
-            try:
-                entity_result = entity_service.process_chapter(
-                    chapter_id=chapter.chapter_id,
-                    paragraphs=chapter.paragraphs,
-                )
-
-                resolved_entities = list(
-                    entity_result.entities
-                )
-            except Exception as exc:
-                resolved_entities = []
-                print(
-                    f"  WARNING: research gagal, lanjut tanpa entitas: {exc}"
-                )
-                if logger:
-                    logger.warning(
-                        f"Entity research failed, continuing without entities: "
-                        f"{chapter.chapter_id} | {exc}"
-                    )
-
-            print(
-                f"  Entities  : "
-                f"{len(resolved_entities)}"
-            )
-
-            if logger:
-                logger.info(
-                    f"Entity research completed: "
-                    f"{chapter.chapter_id} | "
-                    f"entities={len(resolved_entities)}"
-                )
-
-                for entity in resolved_entities:
-                    logger.info(
-                        "Entity result: "
-                        f"{chapter.chapter_id} | "
-                        f"{entity.text} | "
-                        f"type={entity.entity_type} | "
-                        f"status={entity.status} | "
-                        f"source={entity.source}"
-                    )
 
         bilingual_title = safe_title(chapter.title, resolved_entities)
         chapter.translated_title = bilingual_title

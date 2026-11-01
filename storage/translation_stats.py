@@ -26,8 +26,6 @@ class ChapterStats:
     def record_chunks(self, processed_chunks):
         self.chunks = len(processed_chunks)
 
-        non_cache_chunks = 0
-
         for chunk in processed_chunks:
             cache_hit = bool(
                 getattr(chunk, "cache_hit", False)
@@ -37,7 +35,6 @@ class ChapterStats:
                 self.cache_hits += 1
             else:
                 self.cache_misses += 1
-                non_cache_chunks += 1
 
             if bool(
                 getattr(chunk, "qa_passed", False)
@@ -63,10 +60,6 @@ class ChapterStats:
                     0,
                 )
 
-        # Cache hit tidak menghasilkan API attempt.
-        # non_cache_chunks hanya dipakai sebagai sanity
-        # reference dan sengaja tidak mengubah attempts.
-        _ = non_cache_chunks
 
 
 @dataclass

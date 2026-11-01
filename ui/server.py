@@ -1116,7 +1116,6 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     state_class = "run" if running else "idle"
     dot = "<span class='dot'></span>" if running else ""
     refresh = ""
-    disabled = " disabled" if running else ""
     cfg_open = "" if running else " open"
     lock_cls = " locked" if running else ""
     if running:

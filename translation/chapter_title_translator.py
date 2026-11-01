@@ -83,17 +83,6 @@ Expected JSON:
             number = label_only.group(1)
             return f"Chapter {number} (Bab {number})"
 
-        # Judul yang hanya berisi label chapter tidak punya bagian
-        # yang bisa diterjemahkan, jadi tidak perlu memanggil model.
-        label_only = re.match(
-            r"^Chapter\s+(\d+)$",
-            title.strip(),
-            flags=re.IGNORECASE,
-        )
-        if label_only:
-            number = label_only.group(1)
-            return f"Chapter {number} (Bab {number})"
-
         # shortcut: kunci cache hanya judul asli; dua novel dengan judul sama memakai terjemahan yang sama
         cached = _load_title_cache(_cache_file()).get(title.strip())
         if cached:
@@ -211,11 +200,3 @@ Translate the chapter title now.
                 "Terjemahan Indonesia hanya berisi label chapter."
             )
 
-        if re.fullmatch(
-            r"Chapter\s+\d+",
-            indonesian_title,
-            flags=re.IGNORECASE,
-        ):
-            raise ValueError(
-                "Terjemahan Indonesia hanya berisi label chapter."
-            )
