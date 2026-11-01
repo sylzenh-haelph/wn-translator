@@ -267,6 +267,7 @@ def reconstruct_output(
     input_path: Path,
     translated_document,
     output_path: Path,
+    chapter_only=False,
 ):
     suffix = output_path.suffix.lower()
 
@@ -275,6 +276,7 @@ def reconstruct_output(
             translated_document,
             output_path,
             source_path=input_path if input_path.suffix.lower() == ".epub" else None,
+            chapter_only=chapter_only,
         )
         return
 
@@ -619,17 +621,8 @@ def export_chapter(
             input_path,
             chapter_document,
             temp_output,
+            chapter_only=True,
         )
-
-        if temp_output.suffix.lower() == ".epub":
-            _prune_chapter_epub(
-                temp_output,
-                chapter_document,
-            )
-            _slim_chapter_epub(
-                temp_output,
-                getattr(chapter, "translated_title", None) or chapter.title,
-            )
 
         validate_output(
             temp_output,

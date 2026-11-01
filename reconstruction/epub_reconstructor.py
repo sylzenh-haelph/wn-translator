@@ -781,6 +781,7 @@ def reconstruct_epub(
     document: Document,
     output_path,
     source_path=None,
+    chapter_only=False,
 ):
     output_path = Path(output_path)
 
@@ -938,7 +939,7 @@ def reconstruct_epub(
         source_path,
     )
 
-    if ncx_path and ncx_xml:
+    if ncx_path and ncx_xml and not chapter_only:
         generated_resources[
             ncx_path
         ] = ncx_xml
@@ -947,7 +948,8 @@ def reconstruct_epub(
             ncx_path
         )
 
-    if not structure.get("navigation_items"):
+    has_nav = any("nav" in (item.get("properties") or "").split() for item in structure.get("manifest", {}).values())
+    if not has_nav:
         # shortcut: EPUB sumber tanpa nav (mis. EPUB 2 ber-NCX) diberi daftar isi baru agar EPUB 3 valid
         nav_href = "nav-generated.xhtml"
         nav_path = _normalize_zip_path(f"{_opf_directory(opf_path)}/{nav_href}")
@@ -971,6 +973,40 @@ def reconstruct_epub(
         image_path = _resolve_resource_path(opf_path, href)
         generated_resources[image_path] = blob
         generated_paths.add(image_path)
+
+    skipped = set()
+    if chapter_only and source_path is not None and Path(source_path).exists():
+        manifest = structure.get("manifest", {})
+        keep_xhtml = set(generated_xhtml)
+        for idref in structure.get("spine", []):
+            href = (manifest.get(idref) or {}).get("href")
+            if href:
+                keep_xhtml.add(_resolve_resource_path(opf_path, href))
+        with ZipFile(source_path, "r") as source_zip:
+            corpus = list(generated_xhtml.values())
+            for name in source_zip.namelist():
+                if name.lower().endswith(".css") or (name in keep_xhtml and name not in generated_xhtml):
+                    corpus.append(source_zip.read(name).decode("utf-8", "ignore"))
+            text = "\n".join(corpus)
+            for name in source_zip.namelist():
+                lower = name.lower()
+                if name in generated_paths or name == "mimetype" or name.startswith("META-INF/"):
+                    continue
+                if lower.endswith((".xhtml", ".html", ".htm")):
+                    if name not in keep_xhtml:
+                        skipped.add(name)
+                elif lower.endswith(".ncx"):
+                    skipped.add(name)
+                elif lower.endswith((".css", ".opf", ".xml")):
+                    continue
+                elif name.rsplit("/", 1)[-1] not in text:
+                    skipped.add(name)
+        if skipped:
+            structure["manifest"] = {
+                key: item
+                for key, item in manifest.items()
+                if _resolve_resource_path(opf_path, item.get("href", "")) not in skipped
+            }
 
     match = re.search(r"_v(\d+)$", output_path.stem)
     content_opf = _build_content_opf(
@@ -1043,6 +1079,9 @@ def reconstruct_epub(
                             name,
                             generated_paths,
                         ):
+                            continue
+
+                        if name in skipped:
                             continue
 
                         data = source_zip.read(
