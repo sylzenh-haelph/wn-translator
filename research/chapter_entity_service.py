@@ -43,9 +43,10 @@ class ChapterEntityService:
             paragraphs=list(paragraphs),
         )
 
-        pipeline_result = self.entity_pipeline.process_document(
-            document
-        )
+        with self.entity_pipeline.db.batch():
+            pipeline_result = self.entity_pipeline.process_document(
+                document
+            )
 
         return ChapterEntityResult(
             chapter_id=chapter_id,

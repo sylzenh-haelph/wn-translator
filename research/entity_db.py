@@ -134,7 +134,29 @@ class EntityDB:
         )
 
     def save(self):
+        # Di dalam batch, penulisan ditunda sampai batch selesai.
+        if getattr(self, "_batch_depth", 0):
+            self._dirty = True
+            return
         self._save_data(self.data)
+        self._dirty = False
+
+    def batch(self):
+        db = self
+
+        class _Batch:
+            def __enter__(self):
+                db._batch_depth = getattr(db, "_batch_depth", 0) + 1
+                return db
+
+            def __exit__(self, *exc):
+                db._batch_depth -= 1
+                if db._batch_depth == 0 and getattr(db, "_dirty", False):
+                    db._save_data(db.data)
+                    db._dirty = False
+                return False
+
+        return _Batch()
 
     def _get_category(self, entity_type):
         if entity_type in VALID_CHARACTER_TYPES:
