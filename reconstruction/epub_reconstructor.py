@@ -427,6 +427,12 @@ def _build_navigation_titles(
         {},
     )
 
+    by_spine = {}
+    for paragraph in document.paragraphs:
+        owner = paragraph_map.get(paragraph.id)
+        if owner is not None:
+            by_spine.setdefault(owner, []).append(paragraph)
+
     result = {}
 
     for idref in structure.get(
@@ -443,13 +449,7 @@ def _build_navigation_titles(
         if not href:
             continue
 
-        paragraphs = [
-            paragraph
-            for paragraph in document.paragraphs
-            if paragraph_map.get(
-                paragraph.id
-            ) == idref
-        ]
+        paragraphs = by_spine.get(idref, [])
 
         if not paragraphs:
             continue

@@ -1,5 +1,6 @@
 import json
 import re
+from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
 
@@ -41,11 +42,9 @@ def load_glossary(path):
     return pairs
 
 
-def apply_glossary(text, pairs):
-    # Peka huruf besar-kecil: 'Lady' diganti, 'lady' sebagai kata biasa tidak.
-    if not pairs or not text:
-        return text
-
+@lru_cache(maxsize=8)
+def _compiled_glossary(pairs):
+    # Tabel dan regex dibangun sekali per glosarium, bukan per paragraf.
     table = {}
     for left, right in pairs:
         for form in {left, left.replace("’", "'"), left.replace("'", "’")}:
@@ -55,6 +54,14 @@ def apply_glossary(text, pairs):
     pattern = re.compile(
         r"(?<![A-Za-z])(" + "|".join(re.escape(k) for k in keys) + r")(?![A-Za-z])"
     )
+    return table, pattern
+
+
+def apply_glossary(text, pairs):
+    # Peka huruf besar-kecil: 'Lady' diganti, 'lady' sebagai kata biasa tidak.
+    if not pairs or not text:
+        return text
+    table, pattern = _compiled_glossary(tuple((left, right) for left, right in pairs))
     return pattern.sub(lambda m: table[m.group(1)], text)
 
 
