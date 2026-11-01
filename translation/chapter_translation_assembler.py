@@ -33,6 +33,7 @@ class ChapterTranslationAssembler:
 
         expected_ids = list(paragraph_ids)
         translated_by_id: dict[str, str] = {}
+        pieces: dict[str, list[str]] = {}
 
         for chunk, processed in zip(chunks, processed_chunks):
             translation = self._get_translation(processed)
@@ -40,11 +41,8 @@ class ChapterTranslationAssembler:
             chunk_ids = list(chunk.paragraph_ids)
 
             if len(chunk_ids) == 1:
-                self._add_translation(
-                    translated_by_id,
-                    chunk_ids[0],
-                    translation,
-                )
+                # Paragraf panjang dipecah ke beberapa chunk dengan ID sama; potongannya digabung lagi.
+                pieces.setdefault(chunk_ids[0], []).append(translation)
                 continue
 
             paragraph_translations = self._extract_paragraph_translations(
@@ -61,6 +59,13 @@ class ChapterTranslationAssembler:
                     paragraph_id,
                     paragraph_text,
                 )
+
+        for paragraph_id, parts in pieces.items():
+            self._add_translation(
+                translated_by_id,
+                paragraph_id,
+                " ".join(parts),
+            )
 
         actual_ids = list(translated_by_id)
 

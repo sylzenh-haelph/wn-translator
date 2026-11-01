@@ -810,6 +810,16 @@ def process_chapters(
     reconstructor = ChapterReconstructor()
     title_translator = ChapterTitleTranslator(processor.translation_engine.client)
 
+    def safe_title(title, entities):
+        # Judul yang gagal diterjemahkan dipakai apa adanya agar chapter tetap jalan.
+        try:
+            return title_translator.translate(title=title, entity_resolutions=entities)
+        except Exception as exc:
+            print(f"  WARNING: judul gagal diterjemahkan, judul asli dipakai: {exc}")
+            if logger:
+                logger.warning(f"Chapter title translation failed: {title} | {exc}")
+            return title
+
     translated_chapters = []
     failed_ids = []
     stats = TranslationStats()
@@ -867,10 +877,7 @@ def process_chapters(
                     f"{chapter.chapter_id}"
                 )
 
-            bilingual_title = title_translator.translate(
-                title=chapter.title,
-                entity_resolutions=[],
-            )
+            bilingual_title = safe_title(chapter.title, [])
             chapter.translated_title = bilingual_title
 
             print(
@@ -989,10 +996,7 @@ def process_chapters(
                         f"source={entity.source}"
                     )
 
-        bilingual_title = title_translator.translate(
-            title=chapter.title,
-            entity_resolutions=resolved_entities,
-        )
+        bilingual_title = safe_title(chapter.title, resolved_entities)
         chapter.translated_title = bilingual_title
 
         print(
@@ -1528,7 +1532,7 @@ def main():
         config_overrides = {}
 
         if args.model is not None:
-            config_overrides["model"] = args.model
+            config_overrides["translation_model"] = args.model
 
         if args.max_retries is not None:
             config_overrides["max_retries"] = (
