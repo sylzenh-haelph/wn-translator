@@ -253,23 +253,3 @@ def extract_entities_batch_with_ai(
     return AIEntityExtractionResult(
         entities=entities
     )
-
-
-def extract_entities_with_ai(
-    client,
-    text,
-    novel_title="",
-    author="",
-):
-    """
-    Backward-compatible single-paragraph wrapper.
-    """
-
-    result = extract_entities_batch_with_ai(
-        client=client,
-        paragraphs=[("paragraph_0", text)],
-        novel_title=novel_title,
-        author=author,
-    )
-
-    return result
