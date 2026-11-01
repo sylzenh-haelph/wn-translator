@@ -97,6 +97,16 @@ def parse_docx(path):
             )
         )
 
+    # Heading 1 jadi pemisah chapter hanya kalau dokumen punya beberapa; DOCX satu chapter tetap utuh.
+    h1 = [
+        paragraph
+        for paragraph in document.paragraphs
+        if str(paragraph.style.get("name") or "").strip().lower() in {"heading 1", "judul 1"}
+    ]
+    if len(h1) >= 2:
+        for paragraph in h1:
+            paragraph.style["heading_level"] = 1
+
     document.metadata["docx_images"] = images
 
     return document

@@ -1,7 +1,8 @@
+import io
 from pathlib import Path
 
 from docx import Document as DocxDocument
-from docx.shared import Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 
 from models.document import Document
 
@@ -58,5 +59,10 @@ def reconstruct_docx(document: Document, output_path):
                 target_run,
                 source_run.formatting,
             )
+
+        for name in paragraph.style.get("images") or []:
+            blob = (document.metadata.get("docx_images") or {}).get(name)
+            if blob:
+                target_paragraph.add_run().add_picture(io.BytesIO(blob), width=Inches(5.5))
 
     output.save(output_path)
