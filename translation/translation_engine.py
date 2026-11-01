@@ -69,14 +69,8 @@ then paragraph_translations MUST have exactly two items:
   "Marcus mengikutinya dengan diam-diam."
 ]
 
-The field translation must contain the complete translated chunk,
-with paragraph boundaries represented by newline characters.
-The newline-separated translation in translation does NOT replace
-the required individual items in paragraph_translations.
-
 Return ONLY valid JSON with this structure:
 {
-  "translation": "...",
   "paragraph_translations": ["...", "..."],
   "context_state": {
     "scene": "...",
@@ -113,8 +107,6 @@ Return ONLY valid JSON with this structure:
         raw = self.client.generate(prompt)
         data = extract_json(raw)
 
-        translation = str(data.get("translation", ""))
-
         paragraph_translations = data.get("paragraph_translations")
 
         if not isinstance(paragraph_translations, list):
@@ -132,6 +124,13 @@ Return ONLY valid JSON with this structure:
                 "Jumlah paragraph_translations tidak sesuai: "
                 f"{len(paragraph_translations)} != {len(paragraph_texts)}"
             )
+
+        # Teks chunk diturunkan dari paragraf, jadi model tidak perlu menulisnya dua kali.
+        translation = (
+            str(data["translation"])
+            if "translation" in data
+            else "\n".join(paragraph_translations)
+        )
 
         context_data = data.get("context_state", {})
 
