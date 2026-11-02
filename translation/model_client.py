@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import threading
 import time
 
 import requests
@@ -13,7 +14,15 @@ class ModelProviderError(RuntimeError):
         self.status_code = status_code
 
 
+_USAGE_LOCK = threading.Lock()
+
+
 def _count_request(model):
+    with _USAGE_LOCK:
+        _count_request_locked(model)
+
+
+def _count_request_locked(model):
     # shortcut: hanya aktif kalau WN_USAGE_FILE diset (lewat UI), supaya tes dan CLI tidak menulis file
     path = os.environ.get("WN_USAGE_FILE", "").strip()
     if not path:

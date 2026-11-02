@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import shutil
 import tempfile
@@ -705,6 +706,7 @@ def process_chapters(
     chapter_selection: tuple[int, int] | None = None,
     chapter_list_path: Path | None = None,
     glossary: list | None = None,
+    workers: int = 1,
 ):
     ai_client = processor.translation_engine.client
 
@@ -766,6 +768,31 @@ def process_chapters(
 
     print()
     print("[2/4] Translating chapters...")
+
+    # workers > 1: terjemahan chapter jalan di thread terpisah; thread utama tetap berurutan
+    # untuk judul, QA, perakitan, dan ekspor.
+    prefetched = {}
+    executor = None
+    if workers > 1:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        for index, chapter in enumerate(chapters, start=1):
+            if (index - 1) not in selected_indexes or not chapter.paragraphs:
+                continue
+            if chapter_action(True, processor, chapter.chapter_id) != "translate":
+                continue
+            prefetched[chapter.chapter_id] = executor.submit(
+                processor.process_chapter,
+                chapter_id=chapter.chapter_id,
+                chunks=build_chunks(chapter.paragraphs, max_tokens=config.max_chunk_tokens),
+                chapter_context={
+                    "chapter_id": chapter.chapter_id,
+                    "chapter_title": chapter.title,
+                    "document_title": document.title,
+                    "author": document.author,
+                },
+                initial_context_state=None,
+                entity_resolutions=[],
+            )
 
     if logger:
         logger.info(
@@ -918,13 +945,17 @@ def process_chapters(
         }
 
         try:
-            result = processor.process_chapter(
-                chapter_id=chapter.chapter_id,
-                chunks=chunks,
-                chapter_context=chapter_context,
-                initial_context_state=None,
-                entity_resolutions=resolved_entities,
-            )
+            future = prefetched.pop(chapter.chapter_id, None)
+            if future is not None:
+                result = future.result()
+            else:
+                result = processor.process_chapter(
+                    chapter_id=chapter.chapter_id,
+                    chunks=chunks,
+                    chapter_context=chapter_context,
+                    initial_context_state=None,
+                    entity_resolutions=resolved_entities,
+                )
         except Exception as exc:
             result = []
             failed_ids.append(chapter.chapter_id)
@@ -1059,6 +1090,8 @@ def process_chapters(
                 f"{chapter.chapter_id}"
             )
 
+    if executor is not None:
+        executor.shutdown(wait=True)
     stats.finish(time.monotonic() - translation_started)
     stats.failed_chapters = failed_ids
 
@@ -1340,6 +1373,13 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Jumlah chapter yang diterjemahkan bersamaan (default 1 = berurutan)",
+    )
+
+    parser.add_argument(
         "--cache-dir",
         default=None,
         help="Override direktori translation cache",
@@ -1351,6 +1391,8 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers harus minimal 1")
 
     input_path = Path(args.input)
     output_path = (
@@ -1603,6 +1645,7 @@ def main():
                     chapter_selection=chapter_selection,
                     chapter_list_path=project_dir / "chapters.json",
                     glossary=load_glossary(Path(args.glossary)),
+                    workers=args.workers,
                 )
             except Exception as exc:
                 if retry_round == 2:

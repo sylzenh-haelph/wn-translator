@@ -1,3 +1,4 @@
+import threading
 from typing import Callable
 
 
@@ -30,7 +31,16 @@ class FailoverModelClient:
             raise ValueError("labels harus sama panjang dengan clients.")
 
         self.on_failover = on_failover
+        self._local = threading.local()
         self.last_used = None
+
+    @property
+    def last_used(self):
+        return getattr(self._local, "value", None)
+
+    @last_used.setter
+    def last_used(self, value):
+        self._local.value = value
 
     def generate(self, prompt):
         errors = []
