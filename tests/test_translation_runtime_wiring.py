@@ -10,6 +10,7 @@ from config.settings import AppConfig
 
 
 def test_runtime_wires_translation_and_refinement_roles(monkeypatch, tmp_path):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     created_clients = []
 
     class FakeClient:

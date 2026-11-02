@@ -1229,6 +1229,10 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh}
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b1214">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1257,6 +1261,27 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 {fabbar}
 {script}
 </body></html>"""
+
+
+ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#00e5ff"/><stop offset="0.5" stop-color="#7cf7b0"/><stop offset="1" stop-color="#c6ff3d"/>
+</linearGradient></defs>
+<rect width="512" height="512" rx="112" fill="#0b1214"/>
+<path d="M362.07 149.93 A150 150 0 1 0 362.07 362.07" fill="none" stroke="url(#g)" stroke-width="64" stroke-linecap="round"/>
+<circle cx="232" cy="256" r="24" fill="#10a37f"/>
+<circle cx="280" cy="256" r="24" fill="#d97757"/>
+</svg>"""
+
+MANIFEST = json.dumps({
+    "name": "Converïse EN»ID",
+    "short_name": "Converïse",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0b1214",
+    "theme_color": "#0b1214",
+    "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
+}, ensure_ascii=False)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1293,6 +1318,10 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("o", [""])[0],
                 ),
             )
+        elif url.path == "/icon.svg":
+            self._send(200, ICON_SVG, "image/svg+xml")
+        elif url.path == "/manifest.webmanifest":
+            self._send(200, MANIFEST, "application/manifest+json; charset=utf-8")
         elif url.path == "/browse":
             self._send(200, browse_page(query.get("path", [""])[0]))
         elif url.path == "/glossary":
