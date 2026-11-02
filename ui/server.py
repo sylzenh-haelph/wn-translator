@@ -57,6 +57,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #m-scan:checked ~ .thumb{transform:translateX(100%)}
 #f-epub:checked ~ .thumb{transform:translateX(0)}
 #f-docx:checked ~ .thumb{transform:translateX(100%)}
+#w-1:checked ~ .thumb{transform:translateX(0)}
+#w-2:checked ~ .thumb{transform:translateX(100%)}
 .bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
 .fill{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
 .running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.55) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.55) 75%,transparent 75%,transparent),var(--grad);background-size:28px 28px,100% 100%;background-position:0 0,0 0;animation:stripes .9s linear infinite;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
@@ -211,6 +213,8 @@ function setMode(v){
   if(out){out.style.display=(v==='scan')?'none':'';}
   var rf=document.getElementById('rfresh');
   if(rf){rf.style.display=(v==='translate')?'':'none';}
+  var ws=document.getElementById('wsec');
+  if(ws){ws.style.display=(v==='translate')?'':'none';}
   var h=document.getElementById('modehint');
   if(h){h.textContent=HINTS[v]||'';}
 }
@@ -824,7 +828,7 @@ def safe_title(value):
     return re.sub(r"\s+", " ", cleaned).strip() or "novel"
 
 
-def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name=""):
+def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", workers=1):
     source = quote(str(input_path))
     project = quote(str(project_for(input_path)))
     repaired = quote(f"temp/repaired/{input_path.stem}.epub")
@@ -847,9 +851,10 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
         out = quote(f"temp/{base}.{fmt}")
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
+        wflag = f" --workers {workers}" if workers > 1 else ""
         args = (
             f"-o {out} --project-dir {project} --export-chapters "
-            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}"
+            f"--chapter-output-dir {chapters_dir} --glossary {glossary}{only}{wflag}"
         )
     env = ("WN_TITLE_CACHE=" + quote("temp/title_cache.json") + " WN_USAGE_FILE=" + quote("temp/usage_counts.json") + " WN_SERIES_ENTITIES=" + quote(f"glossary/.entities/{Path(glossary_name).stem}.json") + " ")
     exit_file = quote("temp/ui_job_exit")
@@ -870,12 +875,14 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     )
 
 
-def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
+def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", workers=1):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
         raise ValueError("format output harus epub atau docx")
     if mode not in MODES:
         raise ValueError("mode tidak dikenal")
+    if workers not in (1, 2):
+        raise ValueError("paralel hanya 1 atau 2")
     if mode == "translate" and numbers is not None and (not numbers or min(numbers) < 1):
         raise ValueError("pilih minimal satu chapter")
     name = clean_output_name(out_name)
@@ -893,7 +900,7 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name=""):
     remember_source(input_path)
     JOB_MODE.write_text(mode, encoding="utf-8")
     notify("WN Translator", "Proses dimulai: " + mode)
-    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name)
+    cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, workers)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
@@ -1149,6 +1156,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <label>Mode</label>
 <div class="seg duo">{mode_inputs}<span class="thumb"></span></div>
 <p class="muted" id="modehint">{html.escape(HINTS[mode])}</p>
+<div id='wsec'{rf_hidden}>
+<label>Paralel chapter</label>
+<div class="seg duo"><input type="radio" id="w-1" name="workers" value="1" checked><label for="w-1">1</label><input type="radio" id="w-2" name="workers" value="2"><label for="w-2">2</label><span class="thumb"></span></div>
+<p class="muted">2 chapter diterjemahkan bersamaan. Lebih cepat, tapi kuota Gemini bisa habis lebih cepat.</p>
+</div>
 <div id="outsec"{outsec_style}>
 <label>Format output</label>
 <div class="seg duo">{format_inputs}<span class="thumb"></span></div>
@@ -1289,6 +1301,8 @@ class Handler(BaseHTTPRequestHandler):
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
         out_name = form.get("out_name", [""])[0]
+        workers_raw = form.get("workers", ["1"])[0]
+        workers = int(workers_raw) if workers_raw in ("1", "2") else 1
 
         if self.path == "/glossary/rename":
             try:
@@ -1307,7 +1321,7 @@ class Handler(BaseHTTPRequestHandler):
                 numbers = {int(i.split("_")[1]) for i in form.get("ch", [])} if rows else None
                 if form.get("retry_fresh", [""])[0] == "1" and mode == "translate" and numbers:
                     retire_progress(project_for(input_path), numbers)
-                start_job(input_path, numbers, fmt, glossary_name, mode, out_name)
+                start_job(input_path, numbers, fmt, glossary_name, mode, out_name, workers)
                 choice = glossary_name
                 msg = "Proses dimulai."
             elif self.path == "/retry":
