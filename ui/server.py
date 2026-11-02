@@ -57,8 +57,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #m-scan:checked ~ .thumb{transform:translateX(100%)}
 #f-epub:checked ~ .thumb{transform:translateX(0)}
 #f-docx:checked ~ .thumb{transform:translateX(100%)}
-#w-1:checked ~ .thumb{transform:translateX(0)}
-#w-2:checked ~ .thumb{transform:translateX(100%)}
 .bar{height:16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
 .fill{height:100%;width:0;border-radius:999px;background:var(--accent);transition:width .6s ease}
 .running .fill{background-image:linear-gradient(45deg,rgba(255,255,255,.55) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.55) 75%,transparent 75%,transparent),var(--grad);background-size:28px 28px,100% 100%;background-position:0 0,0 0;animation:stripes .9s linear infinite;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
@@ -875,6 +873,28 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     )
 
 
+SELECTION_FILE = "last_selection.json"
+
+
+def save_selection(project, numbers):
+    project.mkdir(parents=True, exist_ok=True)
+    value = "all" if numbers is None else sorted(f"chapter_{n:03d}" for n in numbers)
+    (project / SELECTION_FILE).write_text(json.dumps(value), encoding="utf-8")
+
+
+def load_selection(project):
+    path = project / SELECTION_FILE
+    if not path.exists():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    if value == "all":
+        return "all"
+    return set(value) if isinstance(value, list) else None
+
+
 def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", workers=1):
     # shortcut: hanya proses dari UI ini yang terdeteksi, proses tmux lain di luar UI tidak
     if fmt not in FORMATS:
@@ -898,6 +918,8 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", worker
         _new_project.mkdir(parents=True, exist_ok=True)
         (_new_project / "config.json").write_text(json.dumps({"max_chunk_tokens": 2000}), encoding="utf-8")
     remember_source(input_path)
+    if mode == "translate":
+        save_selection(project_for(input_path), numbers)
     JOB_MODE.write_text(mode, encoding="utf-8")
     notify("WN Translator", "Proses dimulai: " + mode)
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, workers)
@@ -1039,6 +1061,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
     rows = (read_chapters(project_for(current)) or preview_chapters_safe(current, project_for(current))) if current else []
     running = job_running()
     job_mode = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else ""
+    selection = load_selection(project_for(current)) if (current and running and job_mode == "translate") else None
     exports = files()
 
     book_title = (novel_title_for(current) or stem) if current else ""
@@ -1056,7 +1079,11 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
         have = chapter_files(stem, number, exports)
         have_attr = ",".join(have)
         done = r["status"] == "completed"
-        checked = " checked" if ((r["status"] == "not_started" and not matter) or (done and fmt not in have)) else ""
+        if selection is None:
+            checked = " checked" if ((r["status"] == "not_started" and not matter) or (done and fmt not in have)) else ""
+        else:
+            picked = (not matter) if selection == "all" else (r["id"] in selection and not matter)
+            checked = " checked" if picked else ""
         if not done:
             file_cell = ""
         elif have:
@@ -1157,9 +1184,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 <div class="seg duo">{mode_inputs}<span class="thumb"></span></div>
 <p class="muted" id="modehint">{html.escape(HINTS[mode])}</p>
 <div id='wsec'{rf_hidden}>
-<label>Paralel chapter</label>
-<div class="seg duo"><input type="radio" id="w-1" name="workers" value="1" checked><label for="w-1">1</label><input type="radio" id="w-2" name="workers" value="2"><label for="w-2">2</label><span class="thumb"></span></div>
-<p class="muted">2 chapter diterjemahkan bersamaan. Lebih cepat, tapi kuota Gemini bisa habis lebih cepat.</p>
+<label class='switch'><input type='checkbox' name='workers' value='2'><span class='slider'></span><span>Paralel 2 chapter (lebih cepat, kuota bisa habis lebih cepat)</span></label>
 </div>
 <div id="outsec"{outsec_style}>
 <label>Format output</label>
@@ -1301,8 +1326,7 @@ class Handler(BaseHTTPRequestHandler):
         mode = form.get("mode", ["translate"])[0]
         mode = mode if mode in MODES else "translate"
         out_name = form.get("out_name", [""])[0]
-        workers_raw = form.get("workers", ["1"])[0]
-        workers = int(workers_raw) if workers_raw in ("1", "2") else 1
+        workers = 2 if form.get("workers", [""])[0] == "2" else 1
 
         if self.path == "/glossary/rename":
             try:

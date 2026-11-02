@@ -173,7 +173,7 @@ def test_ambiguous_spine_calls_ai():
         ("ambiguous", 2, "Test Novel"),
     ]
     assert len(chapters) == 1
-    assert chapters[0].title == "Test Novel"
+    assert chapters[0].title == "Something happened."
     assert len(chapters[0].paragraphs) == 2
 
 

@@ -196,10 +196,13 @@ class DocumentChapterSplitter:
                         break
 
             if not title:
-                title = (
-                    document.title
-                    or "Untitled Chapter"
-                )
+                # Bagian tanpa judul (mis. diary tanpa heading) diberi nama dari kalimat pertamanya,
+                # bukan judul novel, supaya tidak dianggap sampul dan ikut tersembunyi di UI.
+                first = next((p.text.strip() for p in source_paragraphs if p.text.strip()), "")
+                if len(first) > 60:
+                    title = first[:60].rstrip() + "…"
+                else:
+                    title = first or document.title or "Untitled Chapter"
 
             # Exclude standalone TOC documents.
             if self._is_toc_document(
