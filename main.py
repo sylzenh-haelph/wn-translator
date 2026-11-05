@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 from concurrent.futures import ThreadPoolExecutor
 import json
 import shutil
@@ -693,6 +694,20 @@ def chapter_action(selected: bool, processor, chapter_id: str) -> str:
     return "translate" if selected else "skip"
 
 
+def _run_worker(processor, title, **kwargs):
+    # Dipanggil dari thread worker. Baris log menunjukkan agent mana yang mengerjakan chapter.
+    name = threading.current_thread().name.rsplit("_", 1)[-1]
+    agent = int(name) + 1 if name.isdigit() else 1
+    print(f"  [agent {agent}] mulai: {title}", flush=True)
+    try:
+        result = processor.process_chapter(**kwargs)
+    except Exception as exc:
+        print(f"  [agent {agent}] gagal: {title} | {exc}", flush=True)
+        raise
+    print(f"  [agent {agent}] selesai: {title} | {len(result)} chunk", flush=True)
+    return result
+
+
 def process_chapters(
     document,
     processor,
@@ -774,14 +789,16 @@ def process_chapters(
     prefetched = {}
     executor = None
     if workers > 1:
-        executor = ThreadPoolExecutor(max_workers=workers)
+        executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="agent")
         for index, chapter in enumerate(chapters, start=1):
             if (index - 1) not in selected_indexes or not chapter.paragraphs:
                 continue
             if chapter_action(True, processor, chapter.chapter_id) != "translate":
                 continue
             prefetched[chapter.chapter_id] = executor.submit(
-                processor.process_chapter,
+                _run_worker,
+                processor,
+                title=chapter.title,
                 chapter_id=chapter.chapter_id,
                 chunks=build_chunks(chapter.paragraphs, max_tokens=config.max_chunk_tokens),
                 chapter_context={

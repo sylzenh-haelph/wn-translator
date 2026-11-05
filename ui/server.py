@@ -502,22 +502,18 @@ def usage_line():
 
 
 def retire_progress(project, numbers):
-    import shutil
-
+    # Progres chapter yang dipilih langsung dihapus (termasuk .bak), tanpa cadangan.
     progress = project / "progress"
     if not progress.exists() or not numbers:
         return 0
-    # shortcut: cache hasil yang sudah lolos QA tetap dipakai, jadi terjemahan ulang bisa langsung dari cache
-    target = progress / "retired" / datetime.now().strftime("%Y%m%d_%H%M%S")
-    moved = 0
+    removed = 0
     for number in sorted(numbers):
         for suffix in (".json", ".json.bak"):
             source = progress / f"chapter_{number:03d}{suffix}"
             if source.exists():
-                target.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(source), str(target / source.name))
-                moved += 1
-    return moved
+                source.unlink()
+                removed += 1
+    return removed
 
 
 LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
@@ -1208,8 +1204,8 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </div>
 {editor}
 <div id='rfresh'{rf_hidden}>
-<label class='switch'><input type='checkbox' name='retry_fresh' value='1'><span class='slider'></span><span>Terjemahkan ulang chapter yang dipilih (abaikan progres lama)</span></label>
-<p class='muted'>Progres lama disimpan di folder retired, tidak dihapus.</p>
+<label class='switch'><input type='checkbox' name='retry_fresh' value='1'><span class='slider'></span><span>Terjemahkan ulang chapter yang dipilih (hapus progres lama)</span></label>
+<p class='muted'>Progres lama langsung dihapus, tanpa cadangan.</p>
 </div>
 </details>
 {log_block}
