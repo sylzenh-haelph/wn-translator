@@ -312,6 +312,51 @@ def _build_container_xml(opf_path):
 
 
 def _build_default_structure(document):
+    """
+    Struktur untuk sumber tanpa struktur EPUB (mis. DOCX).
+    Kalau ada beberapa Heading 1, tiap chapter jadi file XHTML sendiri:
+    reader membuat halaman baru di setiap batas chapter dan daftar isi memuat semuanya.
+    """
+    paragraphs = document.paragraphs
+    starts = [
+        i for i, p in enumerate(paragraphs)
+        if (p.style or {}).get("heading_level") == 1
+    ]
+    if len(starts) < 2:
+        return _single_content_structure(document)
+
+    bounds = []
+    if starts[0] > 0:
+        bounds.append((0, starts[0], "chapter-000"))
+    for n, start in enumerate(starts):
+        end = starts[n + 1] if n + 1 < len(starts) else len(paragraphs)
+        bounds.append((start, end, f"chapter-{n + 1:03d}"))
+
+    manifest = {}
+    spine = []
+    mapping = {}
+    for start, end, idref in bounds:
+        manifest[idref] = {
+            "href": f"{idref}.xhtml",
+            "media_type": "application/xhtml+xml",
+            "properties": "",
+        }
+        spine.append(idref)
+        for paragraph in paragraphs[start:end]:
+            mapping[paragraph.id] = idref
+
+    return {
+        "opf_path": "OEBPS/content.opf",
+        "manifest": manifest,
+        "spine": spine,
+        "paragraph_spine_map": mapping,
+        "spine_stylesheets": {},
+        "xhtml_sources": {},
+        "package_metadata": {},
+    }
+
+
+def _single_content_structure(document):
     return {
         "opf_path": "OEBPS/content.opf",
         "manifest": {
@@ -813,7 +858,7 @@ def reconstruct_epub(
     )
 
     if not grouped:
-        structure = _build_default_structure(
+        structure = _single_content_structure(
             document
         )
 
