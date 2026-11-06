@@ -311,6 +311,24 @@ def _build_container_xml(opf_path):
     )
 
 
+def _squash(text):
+    return re.sub(r"[^a-z0-9]", "", str(text).lower())
+
+
+def _heading_start(paragraphs, index, title, floor):
+    # Judul dan subjudul chapter ditulis sebagai paragraf sebelum isi. Batas chapter dimundurkan
+    # melewati paragraf yang teksnya termuat di judul, supaya judul ikut ke chapter barunya.
+    target = _squash(title)
+    if not target:
+        return index
+    while index - 1 >= floor:
+        text = _squash(paragraphs[index - 1].text)
+        if len(text) < 6 or text not in target:
+            break
+        index -= 1
+    return index
+
+
 def _build_default_structure(document):
     """
     Struktur untuk sumber tanpa struktur EPUB (mis. DOCX).
@@ -325,9 +343,14 @@ def _build_default_structure(document):
     titles = []
     for mark in marks:
         index = index_of.get(mark.get("paragraph_id"))
-        if index is not None and (not starts or index > starts[-1]):
+        if index is None:
+            continue
+        title = mark.get("title", "")
+        floor = starts[-1] + 1 if starts else 0
+        index = _heading_start(paragraphs, index, title, floor)
+        if not starts or index > starts[-1]:
             starts.append(index)
-            titles.append(mark.get("title", ""))
+            titles.append(title)
 
     if len(starts) < 2:
         starts = [
