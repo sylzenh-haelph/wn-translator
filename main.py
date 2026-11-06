@@ -1752,6 +1752,16 @@ def main():
 
         print("  PASS")
 
+        # Batas chapter untuk EPUB dari DOCX: tiap chapter jadi halaman dan entri daftar isi sendiri.
+        translated_document.metadata["chapter_starts"] = [
+            {
+                "paragraph_id": chapter.paragraphs[0].id,
+                "title": getattr(chapter, "translated_title", None) or chapter.title,
+            }
+            for chapter in translated_chapters
+            if chapter.paragraphs
+        ]
+
         logger.info(
             "Document assembly completed"
         )

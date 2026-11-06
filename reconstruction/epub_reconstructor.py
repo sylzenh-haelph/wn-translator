@@ -314,34 +314,51 @@ def _build_container_xml(opf_path):
 def _build_default_structure(document):
     """
     Struktur untuk sumber tanpa struktur EPUB (mis. DOCX).
-    Kalau ada beberapa Heading 1, tiap chapter jadi file XHTML sendiri:
-    reader membuat halaman baru di setiap batas chapter dan daftar isi memuat semuanya.
+    Batas chapter diambil dari metadata chapter_starts (dari hasil terjemahan).
+    Kalau tidak ada, dipakai Heading 1. Tiap chapter jadi file XHTML sendiri.
     """
     paragraphs = document.paragraphs
-    starts = [
-        i for i, p in enumerate(paragraphs)
-        if (p.style or {}).get("heading_level") == 1
-    ]
+    marks = document.metadata.get("chapter_starts") or []
+
+    index_of = {p.id: i for i, p in enumerate(paragraphs)}
+    starts = []
+    titles = []
+    for mark in marks:
+        index = index_of.get(mark.get("paragraph_id"))
+        if index is not None and (not starts or index > starts[-1]):
+            starts.append(index)
+            titles.append(mark.get("title", ""))
+
+    if len(starts) < 2:
+        starts = [
+            i for i, p in enumerate(paragraphs)
+            if (p.style or {}).get("heading_level") == 1
+        ]
+        titles = []
     if len(starts) < 2:
         return _single_content_structure(document)
 
     bounds = []
     if starts[0] > 0:
-        bounds.append((0, starts[0], "chapter-000"))
+        bounds.append((0, starts[0], "chapter-000", ""))
     for n, start in enumerate(starts):
         end = starts[n + 1] if n + 1 < len(starts) else len(paragraphs)
-        bounds.append((start, end, f"chapter-{n + 1:03d}"))
+        title = titles[n] if n < len(titles) else ""
+        bounds.append((start, end, f"chapter-{n + 1:03d}", title))
 
     manifest = {}
     spine = []
     mapping = {}
-    for start, end, idref in bounds:
+    chapter_titles = {}
+    for start, end, idref, title in bounds:
         manifest[idref] = {
             "href": f"{idref}.xhtml",
             "media_type": "application/xhtml+xml",
             "properties": "",
         }
         spine.append(idref)
+        if title:
+            chapter_titles[idref] = title
         for paragraph in paragraphs[start:end]:
             mapping[paragraph.id] = idref
 
@@ -353,6 +370,7 @@ def _build_default_structure(document):
         "spine_stylesheets": {},
         "xhtml_sources": {},
         "package_metadata": {},
+        "chapter_titles": chapter_titles,
     }
 
 
@@ -499,9 +517,9 @@ def _build_navigation_titles(
         if not paragraphs:
             continue
 
-        title = ""
+        title = structure.get("chapter_titles", {}).get(idref, "")
 
-        for paragraph in paragraphs:
+        for paragraph in (paragraphs if not title else []):
             if paragraph.style.get(
                 "heading_level"
             ):

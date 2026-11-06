@@ -34,3 +34,29 @@ def test_docx_chapters_become_separate_pages_with_toc(tmp_path):
     assert "Bab 2: Lanjut" in nav
     assert "isi satu" in chapter_one
     assert "isi dua" not in chapter_one
+
+
+def test_chapter_starts_metadata_drives_split(tmp_path):
+    paragraphs = [
+        Paragraph(id="a1", runs=[TextRun("Isi A")], style={}),
+        Paragraph(id="a2", runs=[TextRun("lagi")], style={}),
+        Paragraph(id="b1", runs=[TextRun("Isi B")], style={}),
+    ]
+    document = Document(
+        title="N",
+        author="",
+        paragraphs=paragraphs,
+        metadata={"chapter_starts": [
+            {"paragraph_id": "a1", "title": "Bab A"},
+            {"paragraph_id": "b1", "title": "Bab B"},
+        ]},
+    )
+    out = tmp_path / "o.epub"
+    reconstruct_epub(document, out)
+    with ZipFile(out) as z:
+        names = set(z.namelist())
+        nav = z.read("OEBPS/nav-generated.xhtml").decode("utf-8")
+    assert "OEBPS/chapter-001.xhtml" in names
+    assert "OEBPS/chapter-002.xhtml" in names
+    assert "Bab A" in nav
+    assert "Bab B" in nav
