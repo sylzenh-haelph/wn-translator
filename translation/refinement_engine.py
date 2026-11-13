@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from translation.chapter_context import ContextState
+from translation.keep_rules import apply_keep
 from translation.model_client import extract_json
 
 
@@ -128,6 +129,8 @@ Return ONLY valid JSON with this structure:
                 context_state=context_state or ContextState(),
             )
 
+        refined_paragraphs = apply_keep(text.split("\n"), refined_paragraphs)
+
         context_data = data.get(
             "context_state",
             {},
@@ -170,7 +173,7 @@ Return ONLY valid JSON with this structure:
         )
 
         return RefinementResult(
-            translation=refined_translation,
+            translation="\n".join(refined_paragraphs),
             paragraph_translations=refined_paragraphs,
             context_state=updated_state,
         )

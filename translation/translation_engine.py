@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from translation.chapter_context import ContextState
+from translation.keep_rules import apply_keep
 from translation.model_client import extract_json
 
 
@@ -124,6 +125,8 @@ Return ONLY valid JSON with this structure:
                 "Jumlah paragraph_translations tidak sesuai: "
                 f"{len(paragraph_translations)} != {len(paragraph_texts)}"
             )
+
+        paragraph_translations = apply_keep(paragraph_texts, paragraph_translations)
 
         # Teks chunk diturunkan dari paragraf, jadi model tidak perlu menulisnya dua kali.
         translation = (
