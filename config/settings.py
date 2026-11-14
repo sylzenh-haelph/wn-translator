@@ -50,6 +50,8 @@ class AppConfig:
     def get_api_key(self, provider: str) -> str:
         if provider == "gemini":
             return self.gemini_api_key
+        if provider == "vikey":
+            return self.vikey_api_key
         raise ValueError(
             f"Provider AI tidak didukung: {provider!r}"
         )
@@ -57,6 +59,17 @@ class AppConfig:
     @property
     def api_key(self) -> str:
         return self.get_api_key(self.provider)
+
+    @property
+    def vikey_api_key(self) -> str:
+        key = os.environ.get("VIKEY_API_KEY")
+
+        if not key:
+            raise RuntimeError(
+                "VIKEY_API_KEY belum tersedia di environment."
+            )
+
+        return key
 
     @property
     def gemini_api_key(self) -> str:
@@ -88,9 +101,9 @@ class AppConfig:
         )
 
         for role, provider, model in role_configs:
-            if provider != "gemini":
+            if provider not in SUPPORTED_PROVIDERS:
                 raise ValueError(
-                    f"{role}_provider harus 'gemini'."
+                    f"{role}_provider harus 'gemini' atau 'vikey'."
                 )
             if not model.strip():
                 raise ValueError(
@@ -165,6 +178,9 @@ class AppConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+SUPPORTED_PROVIDERS = {"gemini", "vikey"}
 
 
 _CONFIG_FIELDS = {
@@ -388,7 +404,7 @@ def parse_model_chain(value: str) -> list[tuple[str, str]]:
             part.strip() for part in item.split(":", 1)
         )
 
-        if provider != "gemini":
+        if provider not in SUPPORTED_PROVIDERS:
             raise ValueError(
                 f"Provider cadangan tidak didukung: {provider!r}"
             )

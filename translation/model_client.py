@@ -267,6 +267,101 @@ class GeminiClient:
 
 
 
+class OpenAICompatibleClient:
+    # Klien untuk endpoint gaya OpenAI (Vikey): /v1/chat/completions dengan Bearer token.
+    RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+    URL = "https://api.vikey.ai/v1/chat/completions"
+
+    def __init__(self, model, api_key=None, max_retries=3, timeout=120, backoff_base=2.0):
+        if not api_key:
+            raise RuntimeError("VIKEY_API_KEY belum tersedia.")
+        if not model:
+            raise ValueError("model tidak boleh kosong.")
+        if max_retries < 0:
+            raise ValueError("max_retries tidak boleh negatif.")
+        if timeout <= 0:
+            raise ValueError("timeout harus lebih besar dari 0.")
+        if backoff_base <= 0:
+            raise ValueError("backoff_base harus lebih besar dari 0.")
+        self.model = model
+        self.api_key = api_key
+        self.max_retries = max_retries
+        self.timeout = timeout
+        self.backoff_base = backoff_base
+        self.session = requests.Session()
+
+    def generate(self, prompt):
+        payload = {"model": self.model, "messages": [{"role": "user", "content": prompt}]}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        last_error = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.post(self.URL, headers=headers, json=payload, timeout=self.timeout)
+
+                if response.status_code in self.RETRYABLE_STATUS_CODES:
+                    last_error = self._build_api_error(response)
+                    if attempt >= self.max_retries:
+                        break
+                    self._sleep(response, attempt)
+                    continue
+
+                if response.status_code >= 400:
+                    raise self._build_api_error(response)
+
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    raise RuntimeError("API mengembalikan response yang bukan JSON.") from exc
+
+                text = self._extract_text(data)
+                _count_request(self.model)
+                return text
+
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = RuntimeError(f"Koneksi ke Vikey gagal: {exc}")
+                if attempt >= self.max_retries:
+                    break
+                self._sleep(None, attempt)
+
+            except requests.RequestException as exc:
+                raise RuntimeError(f"Request ke Vikey gagal: {exc}") from exc
+
+        raise last_error or RuntimeError("Request ke Vikey gagal setelah seluruh retry.")
+
+    def _sleep(self, response, attempt):
+        retry_after = GeminiClient._get_retry_after(response)
+        delay = retry_after if retry_after is not None else self.backoff_base * (2 ** attempt)
+        delay = min(delay, 60.0)
+        print(f"  Vikey retry {attempt + 1}/{self.max_retries} dalam {delay:.1f}s...")
+        time.sleep(delay)
+
+    @staticmethod
+    def _build_api_error(response):
+        status = response.status_code
+        try:
+            data = response.json()
+            message = (data.get("error") or {}).get("message") or data.get("message")
+        except (ValueError, AttributeError):
+            message = None
+        if message:
+            return ModelProviderError(f"Vikey API HTTP {status}: {message}", provider="vikey", status_code=status)
+        return ModelProviderError(f"Vikey API HTTP {status}.", provider="vikey", status_code=status)
+
+    @staticmethod
+    def _extract_text(data):
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("API tidak mengembalikan choices.")
+        content = (choices[0].get("message") or {}).get("content")
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        if not content:
+            reason = choices[0].get("finish_reason", "tidak diketahui")
+            raise RuntimeError(f"Tidak menemukan output text dari model. finishReason={reason}")
+        return content
+
+
 def create_model_client(
     provider,model,api_key,max_retries=3,
     timeout=120,backoff_base=2.0
@@ -275,6 +370,14 @@ def create_model_client(
 
     if provider=="gemini":
         return GeminiClient(
+            model=model,api_key=api_key,
+            max_retries=max_retries,
+            timeout=timeout,
+            backoff_base=backoff_base,
+        )
+
+    if provider == "vikey":
+        return OpenAICompatibleClient(
             model=model,api_key=api_key,
             max_retries=max_retries,
             timeout=timeout,
