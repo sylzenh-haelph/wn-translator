@@ -183,6 +183,11 @@ def _check_untranslated_english(translation, issues):
 
     for index, paragraph in enumerate(translation.split("\n")):
         cleaned = re.sub(r"https?://\S+|www\.\S+", " ", paragraph)
+        cleaned = re.sub(
+            r"“([^”\n]*)”|\"([^\"\n]*)\"",
+            lambda m: " " if len((m.group(1) or m.group(2) or "").split()) <= 4 else m.group(0),
+            cleaned,
+        )
         for sentence in re.split(r"[.!?]+", cleaned):
             words = re.findall(r"[A-Za-z']+", sentence.lower())
             if len(words) < 4:
