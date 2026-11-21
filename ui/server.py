@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 from ui.glossary_page import STYLE, glossary_page, save_glossary  # noqa: E402
 from translation.glossary import load_glossary  # noqa: E402
+from ui.job_notify import label as mode_label, send as send_notice  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -519,19 +520,9 @@ def retire_progress(project, numbers):
 LIVE_JS = "\nfunction guard(btn){\n  if(btn.getAttribute('data-busy')==='1'){return false;}\n  btn.setAttribute('data-busy','1');\n  if(btn.classList.contains('go')){sessionStorage.setItem('startedAt',String(Date.now()));}\n  return true;\n}\n(function(){\n  var btn=document.querySelector('.fabbar button');\n  if(!btn){return;}\n  var started=parseInt(sessionStorage.getItem('startedAt')||'0',10);\n  var left=started+2500-Date.now();\n  if(btn.classList.contains('stop')&&left>0){\n    btn.disabled=true;\n    setTimeout(function(){btn.disabled=false;},left);\n  }\n})();\nfunction loadSavedLog(){\n  var log=document.getElementById('log');\n  if(!log){return;}\n  var v=localStorage.getItem('logOpen');\n  log.open=(v===null)?true:(v==='1');\n  log.addEventListener('toggle',function(){localStorage.setItem('logOpen',log.open?'1':'0');});\n  log.querySelectorAll('details.sess').forEach(function(d){\n    var key=d.querySelector('summary').textContent;\n    var s=localStorage.getItem('sess:'+key);\n    if(s!==null){d.open=(s==='1');}\n    d.addEventListener('toggle',function(){localStorage.setItem('sess:'+key,d.open?'1':'0');});\n  });\n}\nfunction snapshotScroll(){\n  var map={};\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    if(pre){map[d.querySelector('summary').textContent]=pre.scrollTop;}\n  });\n  return map;\n}\nfunction restoreScroll(map){\n  document.querySelectorAll('details.sess').forEach(function(d){\n    var pre=d.querySelector('pre');\n    var key=d.querySelector('summary').textContent;\n    if(pre&&(key in map)){pre.scrollTop=map[key];}\n  });\n}\nfunction swapBlock(doc,id){\n  var oldNode=document.getElementById(id);\n  var newNode=doc.getElementById(id);\n  if(!oldNode||!newNode){return false;}\n  oldNode.replaceWith(newNode);\n  return true;\n}\nloadSavedLog();\nvar liveRunning=document.body.getAttribute('data-running')==='1';\nsetInterval(function(){\n  if(!liveRunning){return;}\n  fetch(window.location.href,{cache:'no-store'}).then(function(r){return r.text();}).then(function(text){\n    var doc=new DOMParser().parseFromString(text,'text/html');\n    var nowRunning=doc.body.getAttribute('data-running')==='1';\n    if(!nowRunning){window.location.reload();return;}\n    var scroll=snapshotScroll();\n    if(!swapBlock(doc,'status')||!swapBlock(doc,'log')){window.location.reload();return;}\n    swapBlock(doc,'progress');\n    animateProgress();\n    swapBlock(doc,'fabbar');\n    loadSavedLog();\n    restoreScroll(scroll);\n  }).catch(function(){});\n},10000);\n"
 
 
-def notify(title, message):
-    try:
-        subprocess.run(
-            ["termux-notification", "--id", "wn_job", "--title", title, "--content", message],
-            capture_output=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-
 def chapter_reasons(log_text):
-    reasons = {}
+    # Semua baris peringatan per chapter (tiga terakhir disimpan) beserta jumlahnya.
+    found = {}
     current = None
     for line in log_text.splitlines():
         match = re.match(r"\s*\[\d+/\d+\] Chapter: (.+)$", line)
@@ -539,32 +530,41 @@ def chapter_reasons(log_text):
             current = match.group(1).strip()
             continue
         if current and ("WARNING" in line or "gagal" in line.lower()):
-            reasons[current] = line.strip()[:200]
-    return reasons
+            entry = found.setdefault(current, {"count": 0, "lines": []})
+            entry["count"] += 1
+            text = line.strip()[:220]
+            if text not in entry["lines"]:
+                entry["lines"].append(text)
+            entry["lines"] = entry["lines"][-3:]
+    return found
 
 
-def failed_block(rows, running, log_text, selected, choice, fmt):
+def failed_block(rows, running, log_text):
     if running:
         return ""
     failed = [r for r in rows if r["status"] == "in_progress"]
     if not failed:
         return ""
-    reasons = chapter_reasons(log_text)
+    found = chapter_reasons(log_text)
     items = []
     for r in failed:
-        reason = reasons.get(r["title"], "alasan tidak tercatat di log")
+        info = found.get(r["title"], {"count": 0, "lines": []})
+        chunks = f"{r['done']}/{r['total']} chunk selesai" if r["total"] else "belum ada chunk"
+        reasons = "".join(
+            f"<p class='muted'>{html.escape(line)}</p>" for line in info["lines"]
+        ) or "<p class='muted'>alasan tidak tercatat di log</p>"
         items.append(
             "<div class='ent'>"
             f"<div class='asal'>{html.escape(r['title'])}</div>"
-            f"<p class='muted'>{html.escape(reason)}</p>"
-            "<form method='post' action='/retry' style='margin:0'>"
-            f"<input type='hidden' name='input' value='{html.escape(selected)}'>"
-            f"<input type='hidden' name='glossary' value='{html.escape(choice)}'>"
-            f"<input type='hidden' name='fmt' value='{html.escape(fmt)}'>"
-            f"<input type='hidden' name='ch' value='{html.escape(r['id'])}'>"
-            "<button type='submit'>Ulang chapter ini</button></form></div>"
+            f"<p class='muted'>{chunks} · peringatan tercatat: {info['count']}</p>"
+            f"{reasons}"
+            "</div>"
         )
-    return "<section><h3>Perlu diulang</h3>" + "".join(items) + "</section>"
+    hint = (
+        "<p class='muted'>Untuk mengulang: centang chapter ini di tabel, "
+        "aktifkan \"Terjemahkan ulang chapter yang dipilih\", lalu Mulai.</p>"
+    )
+    return "<section><h3>Perlu diulang</h3>" + "".join(items) + hint + "</section>"
 
 
 NON_STORY_TITLE = re.compile(
@@ -824,6 +824,7 @@ def safe_title(value):
 
 def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name="", workers=1):
     source = quote(str(input_path))
+    novel_name = novel_title(input_path.stem) or input_path.stem
     project = quote(str(project_for(input_path)))
     repaired = quote(f"temp/repaired/{input_path.stem}.epub")
     if input_path.suffix.lower() == ".epub":
@@ -836,6 +837,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
         prepare = f"WN_SRC={source}; "
     source = '"$WN_SRC"'
     glossary = quote(f"glossary/{glossary_name}")
+    output_arg = quote("-")
     if mode == "scan":
         args = f"--scan-glossary {glossary} --project-dir {project}"
     else:
@@ -843,6 +845,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
         marker = "by" if (input_path.suffix.lower() == ".docx" and fmt == "epub") else "in"
         base = f"(ID {marker} Converïse) {out_name or title}_{stamp}"
         out = quote(f"temp/{base}.{fmt}")
+        output_arg = out
         chapters_dir = quote(f"temp/{input_path.stem}_chapters")
         only = "" if numbers is None else " --chapter " + ",".join(str(n) for n in sorted(numbers))
         wflag = f" --workers {workers}" if workers > 1 else ""
@@ -854,9 +857,7 @@ def build_command(input_path, numbers, fmt, glossary_name, mode, stamp, out_name
     exit_file = quote("temp/ui_job_exit")
     done_script = (
         "code=$(cat temp/ui_job_exit 2>/dev/null); "
-        "if [ \"$code\" = \"0\" ]; then m='Terjemahan selesai'; "
-        "else m=\"Selesai dengan error (kode $code)\"; fi; "
-        "termux-notification --id wn_job --title 'WN Translator' --content \"$m\" 2>/dev/null; "
+        f"python -m ui.job_notify done {mode} \"$code\" {project} {quote(novel_name)} {output_arg} 2>/dev/null; "
     )
     return (
         f"cd {quote(str(ROOT))} && termux-wake-lock; rm -f temp/ui_job_exit; "
@@ -917,14 +918,15 @@ def start_job(input_path, numbers, fmt, glossary_name, mode, out_name="", worker
     if mode == "translate":
         save_selection(project_for(input_path), numbers)
     JOB_MODE.write_text(mode, encoding="utf-8")
-    notify("WN Translator", "Proses dimulai: " + mode)
+    send_notice(f"{mode_label(mode)} berjalan", novel_title(input_path.stem) or input_path.stem, ongoing=True)
     cmd = build_command(input_path, numbers, fmt, glossary_name, mode, stamp, name, workers)
     subprocess.run(["tmux", "new-session", "-d", "-s", JOB, cmd], check=True)
 
 
 def stop_job():
     log_marker("DIHENTIKAN")
-    notify("WN Translator", "Proses dihentikan.")
+    mode_now = JOB_MODE.read_text(encoding="utf-8").strip() if JOB_MODE.exists() else "translate"
+    send_notice(f"{mode_label(mode_now)} dihentikan", "")
     subprocess.run(["tmux", "kill-session", "-t", JOB], capture_output=True)
 
 
@@ -1216,10 +1218,7 @@ def page(selected="", choice="", message="", fmt="epub", mode="translate", out_n
 </section>
 </form>"""
     log_text = JOB_LOG.read_text(encoding="utf-8", errors="ignore") if JOB_LOG.exists() else ""
-    failed_html = failed_block(
-        rows, running, log_text,
-        f"input/{current.name}" if current else "", choice, fmt,
-    )
+    failed_html = failed_block(rows, running, log_text)
     script = f"<script>var HINTS={json.dumps(HINTS, ensure_ascii=False)};{SCRIPT}{LIVE_JS}</script>"
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -1373,14 +1372,6 @@ class Handler(BaseHTTPRequestHandler):
                 start_job(input_path, numbers, fmt, glossary_name, mode, out_name, workers)
                 choice = glossary_name
                 msg = "Proses dimulai."
-            elif self.path == "/retry":
-                input_path = safe_input(selected)
-                glossary_name = resolve_glossary(choice, "")
-                chapter_number = int(form.get("ch", [""])[0].split("_")[1])
-                retire_progress(project_for(input_path), {chapter_number})
-                start_job(input_path, {chapter_number}, fmt, glossary_name, "translate", out_name)
-                choice = glossary_name
-                msg = f"Mengulang chapter {chapter_number}."
             elif self.path == "/stop":
                 stop_job()
                 msg = "Proses dihentikan."
