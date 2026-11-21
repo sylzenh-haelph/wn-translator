@@ -85,7 +85,7 @@ class AppConfig:
     def validate(self) -> None:
         if self.provider != "gemini":
             raise ValueError(
-                "provider harus 'gemini'."
+                "provider harus 'gemini' atau 'vikey'."
             )
 
         if not self.model.strip():
