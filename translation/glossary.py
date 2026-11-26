@@ -295,3 +295,66 @@ def merge_scan_glossary(entries, path, title, translations=None):
     added = [name for names in by_kind.values() for name in names]
     write_meta(path, added)
     return len(added)
+
+
+USAGE_WINDOW = 20
+
+
+def prune_unused_entries(glossary_path, chapter_sources, window=USAGE_WINDOW):
+    # chapter_sources: daftar (key, teks_sumber). Key unik per chapter agar chapter yang diulang tidak dihitung dua kali.
+    # Entri yang tidak muncul di teks sumber selama 'window' chapter dihapus dari file (tanpa konfirmasi).
+    import json
+    import re
+    from pathlib import Path
+
+    path = Path(glossary_path)
+    if not path.exists() or not chapter_sources:
+        return []
+
+    usage_path = path.parent / ".usage" / f"{path.stem}.json"
+    try:
+        usage = json.loads(usage_path.read_text(encoding="utf-8")) if usage_path.exists() else {}
+    except ValueError:
+        usage = {}
+
+    seen = set(usage.get("seen", []))
+    counter = int(usage.get("counter", 0))
+    last = dict(usage.get("last", {}))
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    active = {}
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "~")) or "=" not in stripped:
+            continue
+        left = stripped.split("=", 1)[0].strip()
+        if left:
+            active.setdefault(left, []).append(index)
+
+    for term in active:
+        last.setdefault(term, counter)
+
+    for key, text in chapter_sources:
+        if key in seen:
+            continue
+        seen.add(key)
+        counter += 1
+        for term in active:
+            if re.search(r"(?<![A-Za-z])" + re.escape(term) + r"(?![A-Za-z])", text or ""):
+                last[term] = counter
+
+    removed = [term for term in active if counter - last.get(term, counter) >= window]
+
+    if removed:
+        drop = {index for term in removed for index in active[term]}
+        lines = [line for index, line in enumerate(lines) if index not in drop]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        for term in removed:
+            last.pop(term, None)
+
+    usage_path.parent.mkdir(parents=True, exist_ok=True)
+    usage_path.write_text(
+        json.dumps({"counter": counter, "last": last, "seen": sorted(seen)}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return removed

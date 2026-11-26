@@ -28,7 +28,7 @@ from translation.ai_spine_classifier import classify_spine_document_with_ai
 from translation.chapter_translation_assembler import ChapterTranslationAssembler
 from translation.chunker import build_chunks
 from translation.document_assembler import DocumentAssembler
-from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary, prune_scan_names, translate_terms
+from translation.glossary import apply_glossary, load_glossary, merge_scan_glossary, prune_scan_names, prune_unused_entries, translate_terms
 from translation.runtime import build_chapter_processor, build_failover_client
 
 
@@ -722,6 +722,7 @@ def process_chapters(
     chapter_list_path: Path | None = None,
     glossary: list | None = None,
     workers: int = 1,
+    glossary_path: Path | None = None,
 ):
     ai_client = processor.translation_engine.client
 
@@ -778,6 +779,7 @@ def process_chapters(
 
     translated_chapters = []
     failed_ids = []
+    completed_sources = []
     stats = TranslationStats()
     translation_started = time.monotonic()
 
@@ -1084,6 +1086,7 @@ def process_chapters(
         )
 
         stats.mark_completed_chapter()
+        completed_sources.append((f"{document.title}|{chapter.chapter_id}", "\n".join(p.text for p in chapter.paragraphs)))
 
         if (
             export_chapters
@@ -1111,6 +1114,13 @@ def process_chapters(
         executor.shutdown(wait=True)
     stats.finish(time.monotonic() - translation_started)
     stats.failed_chapters = failed_ids
+    if glossary_path is not None and completed_sources:
+        removed = prune_unused_entries(glossary_path, completed_sources)
+        if removed:
+            shown = ", ".join(removed[:10]) + (" ..." if len(removed) > 10 else "")
+            print(f"  Glosarium: {len(removed)} entri tidak dipakai selama 20 chapter, dihapus: {shown}")
+            if logger:
+                logger.info(f"Glossary pruned: {len(removed)} entries removed")
 
     # DocumentAssembler expects the complete chapter sequence.
     # Selected chapters use their translated reconstruction;
@@ -1663,6 +1673,7 @@ def main():
                     chapter_list_path=project_dir / "chapters.json",
                     glossary=load_glossary(Path(args.glossary)),
                     workers=args.workers,
+                    glossary_path=Path(args.glossary),
                 )
             except Exception as exc:
                 if retry_round == 2:
